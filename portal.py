@@ -16,7 +16,7 @@ from email.mime.multipart import MIMEMultipart
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.1 - Bulut & Yerel Uyumlu Master Sürüm"
+VERSIYON = "Aktürk CRM v6.2 - İptal Modülü Entegreli"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 JSON_FILE = "anahtar.json"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
@@ -82,7 +82,6 @@ def get_credentials():
             creds_dict = json.loads(st.secrets["google_kasa"])
             return Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     except Exception:
-        # Bilgisayarda kasa olmadığı için hata verirse umursamaz ve aşağıya geçer
         pass
         
     # Masaüstü (Yerel) kullanım için anahtar.json dosyasından okur
@@ -250,6 +249,10 @@ else:
             plk = c9.text_input("Plaka", p_data["plaka"])
             
             st.subheader("2. Finans, Komisyon ve Ödeme")
+            
+            # --- YENİ İPTAL MODÜLÜ ---
+            iptal_mi = st.checkbox("🚨 BU BİR İPTAL (İADE) İŞLEMİDİR (İşaretlerseniz hesaplara otomatik eksi bakiyeyle geçer)")
+            
             c10, c11, c12 = st.columns(3)
             urn = c10.selectbox("Ürün Türü", urun_listesi)
             net = c11.number_input("Net Prim", value=float(p_data["net_prim"]))
@@ -274,6 +277,12 @@ else:
                     aktif_acente = acn
                     mus = temiz_isim(mus_girdi)
                     
+                    # İptal Durumu Kontrolü ve Hesaplamaları
+                    if iptal_mi:
+                        net = -abs(net)
+                        brut = -abs(brut)
+                        sir = f"{sir} (İPTAL)"
+                    
                     link = drive_pdf_yukle(f_bytes, f"{mus}_{plk}_{sir}.pdf") if f_bytes else "Yok"
                     
                     u_oran = sayiya_cevir(dict_urun.get(urn, 0.0))
@@ -295,7 +304,11 @@ else:
                     # 2. Cari Kayıtları
                     bugun = datetime.now().strftime("%d.%m.%Y")
                     aciklama = f"{sir} - {urn} - Plaka: {plk}"
-                    doc.worksheet("Cari_Islemler").append_row([bugun, "Müşteri Carisi", mus, aciklama, brut, 0, odm, taksit])
+                    
+                    if iptal_mi:
+                        doc.worksheet("Cari_Islemler").append_row([bugun, "Müşteri Carisi", mus, f"İPTAL İADESİ - {aciklama}", brut, 0, odm, taksit])
+                    else:
+                        doc.worksheet("Cari_Islemler").append_row([bugun, "Müşteri Carisi", mus, aciklama, brut, 0, odm, taksit])
                     
                     if aktif_acente != "Aktürk Sigorta (Merkez)":
                         doc.worksheet("Cari_Islemler").append_row([bugun, "Tali Acente Carisi", aktif_acente, f"Acente Payı Kesintisi - {aciklama}", akturk_kazanci, 0, "Aktürk Sigorta Kazancı", 1])
@@ -303,7 +316,7 @@ else:
                     # 3. Müşteri Veritabanı
                     doc.worksheet("Musteriler").append_row([mus, tc, ilet, brut])
                     st.cache_data.clear()
-                st.success("Harika! Tüm kayıtlar başarıyla oluşturuldu.")
+                st.success("Harika! Kayıtlar başarıyla oluşturuldu.")
 
     # ------------------------------------------
     # 5.2 CARİ & FİNANS (Gelişmiş Detay ve Filtre)
@@ -326,7 +339,6 @@ else:
                 secilen_acente = st.selectbox("Hesabını Görmek İstediğiniz Acenteyi Seçin:", ["Seçiniz..."] + acenteler)
                 
                 if secilen_acente != "Seçiniz...":
-                    # Kâr Hesaplama Motoru
                     acente_policeleri = df_pol[df_pol["Acente"] == secilen_acente].copy()
                     tali_orani = sayiya_cevir(acente_oranlari.get(secilen_acente, 0.0))
                     if tali_orani > 1: tali_orani /= 100 
@@ -340,9 +352,8 @@ else:
                     acente_policeleri["Aktürk Sigorta Kazancı"] = acente_policeleri["Net Prim"] * acente_policeleri["Ürün Komisyonu"] * tali_orani
                     
                     st.write(f"📊 **{secilen_acente} - Poliçe Üretimi ve Kazanç Tablosu**")
-                    st.dataframe(acente_policeleri[["Tanzim Tarihi", "Müşteri Adı Soyadı", "Plaka", "Net Prim", "Aktürk Sigorta Kazancı"]], use_container_width=True)
+                    st.dataframe(acente_policeleri[["Tanzim Tarihi", "Müşteri Adı Soyadı", "Plaka", "Net Prim", "Aktürk Sigorta Kazancı", "Sigorta Şirketi"]], use_container_width=True)
                     
-                    # Cari Hareketler
                     a_cari = df_cari[(df_cari["Kisi_Kurum"] == secilen_acente) & (df_cari["Islem_Turu"] == "Tali Acente Carisi")].copy()
                     if not a_cari.empty:
                         c_tarih1, c_tarih2 = st.columns(2)
@@ -362,7 +373,6 @@ else:
                         filtrelenmis = a_cari[mask]
                         st.dataframe(filtrelenmis[["Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], use_container_width=True)
                         
-                        # Acente Excel
                         buffer_acente = io.BytesIO()
                         with pd.ExcelWriter(buffer_acente, engine='openpyxl') as writer:
                             filtrelenmis[["Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]].to_excel(writer, index=False, sheet_name='Ekstre')
@@ -406,7 +416,6 @@ else:
                     filtrelenmis_m = m_cari[mask_m]
                     st.dataframe(filtrelenmis_m[["Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], use_container_width=True)
                     
-                    # Müşteri Excel
                     buffer_musteri = io.BytesIO()
                     with pd.ExcelWriter(buffer_musteri, engine='openpyxl') as writer:
                         filtrelenmis_m[["Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]].to_excel(writer, index=False, sheet_name='Musteri_Ekstre')
@@ -450,7 +459,7 @@ else:
                     return "🟡 YAKLAŞIYOR"
                 takvim["DURUM"] = takvim["Kalan Gün"].apply(uyari)
                 
-                gosterim = ["DURUM", "Kalan Gün", "Bitiş Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü"]
+                gosterim = ["DURUM", "Kalan Gün", "Bitiş Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Sigorta Şirketi"]
                 if "PDF Linki" in takvim.columns: gosterim.append("PDF Linki")
                 
                 st.dataframe(takvim[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
