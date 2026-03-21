@@ -17,7 +17,7 @@ import difflib
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.29 - Google Drive Entegre Tam Silme"
+VERSIYON = "Aktürk CRM v6.31 - CSS Menü Görünürlük Düzeltmesi"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 JSON_FILE = "anahtar.json"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
@@ -159,7 +159,6 @@ def drive_pdf_yukle(file_bytes, file_name):
         return file.get('webViewLink')
     except: return "Yok"
 
-# 🌟 YENİ: Drive'dan PDF Silme Fonksiyonu
 def drive_pdf_sil(link):
     if pd.isna(link) or link == "Yok" or not link: return
     try:
@@ -168,7 +167,7 @@ def drive_pdf_sil(link):
             file_id = match.group(1)
             drive_service = get_drive_service()
             drive_service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
-    except: pass # Dosya silinmişse veya hata verirse sistemi durdurma
+    except: pass 
 
 def klasik_analiz(metin):
     data = {"tanzim": "", "baslangic": "", "bitis": "", "musteri": "", "tc_vkn": "", "sirket": "", "urun": "", "p_no": "", "plaka": "", "net_prim": 0.0, "brut_prim": 0.0}
@@ -250,9 +249,51 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #2C3E50 !important; font-weight: bold !important; }
     div[data-testid="stMetricLabel"] { color: #7F8C8D !important; font-size: 14px !important; }
     
-    [data-testid="stSidebar"] { background-color: #1A252F !important; border-right: none !important; }
-    [data-testid="stSidebar"] * { color: #ECF0F1 !important; }
-    [data-testid="stSidebar"] hr { border-color: #34495E !important; }
+    /* 🌟 GEMINI TARZI YAN MENÜ (SIDEBAR) - DÜZELTİLDİ 🌟 */
+    [data-testid="stSidebar"] { 
+        background-color: #F0F4F9 !important; 
+        border-right: none !important; 
+    }
+    [data-testid="stSidebar"] hr { 
+        border-color: #DADCE0 !important; 
+    }
+    
+    /* Menü Radyo Butonlarını (Yuvarlakları) Yazıyı Bozmadan Gizle */
+    [data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child {
+        display: none !important; 
+    }
+    
+    /* Menü Maddelerini Kapsül (Pill) Yap */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+        padding: 10px 16px !important;
+        margin-bottom: 4px !important;
+        border-radius: 24px !important;
+        transition: background-color 0.2s ease !important;
+        cursor: pointer !important;
+        width: 100% !important; /* Yazıların tam oturması için eklendi */
+    }
+    
+    /* Metin Rengi Sabitlemesi */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p {
+        color: #202124 !important;
+        margin: 0 !important;
+    }
+    
+    /* Menü Hover (Üzerine Gelince) */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
+        background-color: #E1E5EA !important; 
+    }
+    
+    /* Seçili Menü Rengi (Gemini Mavi) */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"],
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
+        background-color: #D3E3FD !important;
+    }
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p,
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p {
+        color: #041E49 !important;
+        font-weight: 700 !important;
+    }
     
     @media (max-width: 768px) {
         .login-box { padding: 25px 15px !important; margin-top: 2vh !important; width: 92% !important; }
@@ -342,11 +383,20 @@ if not st.session_state["giris_yapildi"]:
 # 5. ANA UYGULAMA
 # ==========================================
 else:
-    st.sidebar.title(f"🛡️ Aktürk Sigorta")
-    st.sidebar.caption(f"Kullanıcı: {st.session_state['kullanici_adi'].upper()}")
-    st.sidebar.divider()
+    # 🌟 GEMINI TARZI YAN MENÜ BAŞLIĞI
+    st.sidebar.markdown("""
+        <div style='display: flex; align-items: center; margin-bottom: 25px; margin-top: 10px;'>
+            <div style='background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3);'>
+                <span style='font-size: 18px; font-weight: 900; color: #FFFFFF;'>A</span>
+            </div>
+            <div>
+                <h2 style='margin: 0; color: #202124; font-size: 20px;'>Aktürk CRM</h2>
+                <span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {}</span>
+            </div>
+        </div>
+    """.format(st.session_state['kullanici_adi'].upper()), unsafe_allow_html=True)
     
-    menu = st.sidebar.radio("MENÜ", [
+    menu = st.sidebar.radio("", [
         "📥 Poliçe Girişi", 
         "💰 Cari & Finans", 
         "📅 Yenileme Takvimi", 
@@ -354,7 +404,7 @@ else:
         "🛠️ Düzeltme & Silme",
         "⚙️ Ayarlar", 
         "🔍 Tüm Arşiv"
-    ], on_change=ekran_temizle)
+    ], on_change=ekran_temizle, label_visibility="collapsed")
 
     # ------------------------------------------
     # 5.1 POLİÇE GİRİŞİ 
@@ -748,7 +798,7 @@ else:
                         st.info(f"💡 **Bunu mu demek istediniz:** {oneri_metni}")
 
     # ------------------------------------------
-    # 🌟 DÜZELTME VE SİLME MERKEZİ (DRIVE SİLME EKLENDİ)
+    # 🛠️ DÜZELTME VE SİLME MERKEZİ 
     # ------------------------------------------
     elif menu == "🛠️ Düzeltme & Silme":
         st.header("🛠️ Kayıt Düzeltme ve Silme Merkezi")
@@ -829,15 +879,12 @@ else:
                                 satir_no = int(re.search(r'\(Satır:(\d+)\)', silinecek_secim).group(1))
                                 s_row = sonuc[sonuc["Sheet_Row"] == satir_no].iloc[0]
                                 
-                                # 1. Drive'dan PDF'i Sil
                                 pdf_linki = s_row.get("PDF Linki", "Yok")
                                 drive_pdf_sil(pdf_linki)
                                 
-                                # 2. Sheets'ten Poliçeyi Sil
                                 doc = client.open_by_key(SHEET_ID)
                                 doc.worksheet("Policeler").delete_rows(satir_no)
                                 
-                                # 3. Cari Kayıtları Sil
                                 aciklama_koku = f"{s_row['Sigorta Şirketi']} - {s_row['Sigorta Türü']} - Plaka: {s_row['Plaka']}".replace(" (İPTAL-SATIŞ)","").replace(" (İPTAL-ZEYL)","")
                                 df_cari = get_data("Cari_Islemler")
                                 if not df_cari.empty:
