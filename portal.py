@@ -15,18 +15,22 @@ from email.mime.multipart import MIMEMultipart
 import difflib
 
 # ==========================================
-# 1. TEMEL AYARLAR VE SABİTLER (GÜVENLİ)
+# 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.32 - Tam Güvenlik (Secrets) Entegrasyonu"
+VERSIYON = "Aktürk CRM v6.34 - Streamlit Secrets Tam Entegrasyon"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
-JSON_FILE = "anahtar.json" # Github'a ASLA yüklenmemeli (.gitignore içinde olmalı)
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
+JSON_FILE = "anahtar.json" # Lokalde çalışırken yedek olarak kalabilir, GitHub'a atılmamalı (.gitignore)
 
-# 🔐 ŞİFRELER KODDAN SİLİNDİ! Artık Streamlit Secrets kasasından çekiliyor.
-PORTAL_KULLANICI = st.secrets.get("PORTAL_KULLANICI", "guvenli_kullanici")
-PORTAL_SIFRE = st.secrets.get("PORTAL_SIFRE", "guvenli_sifre")
-GONDEREN_MAIL = st.secrets.get("GONDEREN_MAIL", "sistem@akturksigorta.net")
-MAIL_SIFRE = st.secrets.get("MAIL_SIFRE", "guvenli_mail_sifresi")
+# 🔐 ŞİFRELER SECRETS KASASINDAN ÇEKİLİYOR
+try:
+    PORTAL_KULLANICI = st.secrets["PORTAL_KULLANICI"]
+    PORTAL_SIFRE = st.secrets["PORTAL_SIFRE"]
+    GONDEREN_MAIL = st.secrets["GONDEREN_MAIL"]
+    MAIL_SIFRE = st.secrets["MAIL_SIFRE"]
+except KeyError:
+    st.error("🚨 Güvenlik Anahtarları (Secrets) bulunamadı! Lütfen '.streamlit/secrets.toml' dosyasını veya Streamlit Cloud ayarlarını kontrol edin.")
+    st.stop() # Şifreler yoksa güvenliği sağlamak için uygulamayı anında durdur
 
 st.set_page_config(page_title="Aktürk Sigorta Portal", layout="wide", initial_sidebar_state="auto")
 
@@ -48,6 +52,9 @@ def mail_gonder(alici, konu, icerik):
     msg['Subject'] = konu
     msg.attach(MIMEText(icerik, 'plain'))
     try:
+        if not MAIL_SIFRE:
+            st.error("Mail şifresi Secrets içine tanımlanmamış!")
+            return False
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(GONDEREN_MAIL, MAIL_SIFRE)
@@ -118,10 +125,13 @@ def excel_indir(df, buton_metni, dosya_adi):
 @st.cache_resource(show_spinner="Bağlantı Kuruluyor...")
 def get_credentials():
     try:
+        # Önce Streamlit Cloud Secrets veya lokal secrets.toml içindeki google_kasa'yı arar
         if "google_kasa" in st.secrets:
             creds_dict = json.loads(st.secrets["google_kasa"])
             return Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     except: pass
+    
+    # Bulamazsa bilgisayarınızdaki anahtar.json dosyasına bakar (Lokal kullanım için yedek)
     return Credentials.from_service_account_file(JSON_FILE, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
 
 @st.cache_resource
@@ -250,51 +260,21 @@ st.markdown("""
     div[data-testid="stMetricValue"] { color: #2C3E50 !important; font-weight: bold !important; }
     div[data-testid="stMetricLabel"] { color: #7F8C8D !important; font-size: 14px !important; }
     
-    /* 🌟 GEMINI TARZI YAN MENÜ (SIDEBAR) - DÜZELTİLDİ 🌟 */
-    [data-testid="stSidebar"] { 
-        background-color: #F0F4F9 !important; 
-        border-right: none !important; 
-    }
-    [data-testid="stSidebar"] hr { 
-        border-color: #DADCE0 !important; 
-    }
+    [data-testid="stSidebar"] { background-color: #F0F4F9 !important; border-right: none !important; }
+    [data-testid="stSidebar"] hr { border-color: #DADCE0 !important; }
+    [data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child { display: none !important; }
     
-    /* Menü Radyo Butonlarını (Yuvarlakları) Yazıyı Bozmadan Gizle */
-    [data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child {
-        display: none !important; 
-    }
-    
-    /* Menü Maddelerini Kapsül (Pill) Yap */
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
-        padding: 10px 16px !important;
-        margin-bottom: 4px !important;
-        border-radius: 24px !important;
-        transition: background-color 0.2s ease !important;
-        cursor: pointer !important;
-        width: 100% !important; /* Yazıların tam oturması için eklendi */
+        padding: 10px 16px !important; margin-bottom: 4px !important; border-radius: 24px !important;
+        transition: background-color 0.2s ease !important; cursor: pointer !important; width: 100% !important;
     }
     
-    /* Metin Rengi Sabitlemesi */
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p {
-        color: #202124 !important;
-        margin: 0 !important;
-    }
-    
-    /* Menü Hover (Üzerine Gelince) */
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-        background-color: #E1E5EA !important; 
-    }
-    
-    /* Seçili Menü Rengi (Gemini Mavi) */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p { color: #202124 !important; margin: 0 !important; }
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background-color: #E1E5EA !important; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"],
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
-        background-color: #D3E3FD !important;
-    }
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background-color: #D3E3FD !important; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p,
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p {
-        color: #041E49 !important;
-        font-weight: 700 !important;
-    }
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color: #041E49 !important; font-weight: 700 !important; }
     
     @media (max-width: 768px) {
         .login-box { padding: 25px 15px !important; margin-top: 2vh !important; width: 92% !important; }
@@ -384,7 +364,6 @@ if not st.session_state["giris_yapildi"]:
 # 5. ANA UYGULAMA
 # ==========================================
 else:
-    # 🌟 GEMINI TARZI YAN MENÜ BAŞLIĞI
     st.sidebar.markdown("""
         <div style='display: flex; align-items: center; margin-bottom: 25px; margin-top: 10px;'>
             <div style='background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3);'>
