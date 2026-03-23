@@ -15,17 +15,18 @@ from email.mime.multipart import MIMEMultipart
 import difflib
 
 # ==========================================
-# 1. TEMEL AYARLAR VE SABİTLER
+# 1. TEMEL AYARLAR VE SABİTLER (GÜVENLİ)
 # ==========================================
-VERSIYON = "Aktürk CRM v6.31 - CSS Menü Görünürlük Düzeltmesi"
+VERSIYON = "Aktürk CRM v6.32 - Tam Güvenlik (Secrets) Entegrasyonu"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
-JSON_FILE = "anahtar.json"
+JSON_FILE = "anahtar.json" # Github'a ASLA yüklenmemeli (.gitignore içinde olmalı)
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
-PORTAL_KULLANICI = "baran"
-PORTAL_SIFRE = "akturk2026"
-GONDEREN_MAIL = "sistem@akturksigorta.net"
-MAIL_SIFRE = "1994686baran" 
+# 🔐 ŞİFRELER KODDAN SİLİNDİ! Artık Streamlit Secrets kasasından çekiliyor.
+PORTAL_KULLANICI = st.secrets.get("PORTAL_KULLANICI", "guvenli_kullanici")
+PORTAL_SIFRE = st.secrets.get("PORTAL_SIFRE", "guvenli_sifre")
+GONDEREN_MAIL = st.secrets.get("GONDEREN_MAIL", "sistem@akturksigorta.net")
+MAIL_SIFRE = st.secrets.get("MAIL_SIFRE", "guvenli_mail_sifresi")
 
 st.set_page_config(page_title="Aktürk Sigorta Portal", layout="wide", initial_sidebar_state="auto")
 
