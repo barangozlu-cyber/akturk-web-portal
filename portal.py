@@ -1,4 +1,19 @@
 import streamlit as st
+import streamlit as st
+
+# ==========================================
+# STREAMLIT İZLERİNİ TAMAMEN SİLME KODU
+# ==========================================
+gizleme_kodu = """
+<style>
+#MainMenu {visibility: hidden;} /* Sağ üstteki menüyü gizler */
+header {visibility: hidden;}    /* Deploy butonunu ve üst boşluğu tamamen gizler */
+footer {visibility: hidden;}    /* En alttaki 'Made with Streamlit' yazısını gizler */
+</style>
+"""
+st.markdown(gizleme_kodu, unsafe_allow_html=True)
+
+# ... senin kodlarının geri kalanı buradan devam etsin ...
 import pdfplumber
 import gspread
 from google.oauth2.service_account import Credentials
