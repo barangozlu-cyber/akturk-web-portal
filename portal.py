@@ -1,6 +1,5 @@
 import streamlit as st
 import streamlit as st
-
 # ==========================================
 # STREAMLIT İZLERİNİ TAMAMEN SİLME KODU
 # ==========================================
@@ -32,10 +31,9 @@ import difflib
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.34 - Streamlit Secrets Tam Entegrasyon"
+VERSIYON = "Aktürk CRM v6.36 - Tam Sürüm (Secrets Entegreli)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
-JSON_FILE = "anahtar.json" # Lokalde çalışırken yedek olarak kalabilir, GitHub'a atılmamalı (.gitignore)
 
 # 🔐 ŞİFRELER SECRETS KASASINDAN ÇEKİLİYOR
 try:
@@ -44,8 +42,8 @@ try:
     GONDEREN_MAIL = st.secrets["GONDEREN_MAIL"]
     MAIL_SIFRE = st.secrets["MAIL_SIFRE"]
 except KeyError:
-    st.error("🚨 Güvenlik Anahtarları (Secrets) bulunamadı! Lütfen '.streamlit/secrets.toml' dosyasını veya Streamlit Cloud ayarlarını kontrol edin.")
-    st.stop() # Şifreler yoksa güvenliği sağlamak için uygulamayı anında durdur
+    st.error("🚨 Güvenlik Anahtarları (Secrets) bulunamadı! Lütfen Streamlit Cloud Ayarlarından Secrets kısmını doldurun.")
+    st.stop()
 
 st.set_page_config(page_title="Aktürk Sigorta Portal", layout="wide", initial_sidebar_state="auto")
 
@@ -60,6 +58,29 @@ def ekran_temizle():
         if key not in ["giris_yapildi", "kullanici_adi", "google_kasa"]:
             del st.session_state[key]
 
+@st.cache_resource(show_spinner="Google Bağlantısı Kuruluyor...")
+def get_credentials():
+    try:
+        if "google_kasa" in st.secrets:
+            # Secrets içindeki JSON metnini sözlüğe çevirir
+            creds_info = json.loads(st.secrets["google_kasa"])
+            return Credentials.from_service_account_info(
+                creds_info, 
+                scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
+            )
+        else:
+            st.error("Secrets içinde 'google_kasa' anahtarı bulunamadı!")
+            st.stop()
+    except Exception as e:
+        st.error(f"Kimlik doğrulama hatası: {e}")
+        st.stop()
+
+@st.cache_resource
+def get_client(): return gspread.authorize(get_credentials())
+def get_drive_service(): return build('drive', 'v3', credentials=get_credentials())
+
+client = get_client()
+
 def mail_gonder(alici, konu, icerik):
     msg = MIMEMultipart()
     msg['From'] = GONDEREN_MAIL
@@ -67,9 +88,7 @@ def mail_gonder(alici, konu, icerik):
     msg['Subject'] = konu
     msg.attach(MIMEText(icerik, 'plain'))
     try:
-        if not MAIL_SIFRE:
-            st.error("Mail şifresi Secrets içine tanımlanmamış!")
-            return False
+        if not MAIL_SIFRE: return False
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(GONDEREN_MAIL, MAIL_SIFRE)
@@ -136,23 +155,6 @@ def excel_indir(df, buton_metni, dosya_adi):
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine='openpyxl') as writer: df_export.to_excel(writer, index=False)
     st.download_button(f"📥 {buton_metni}", out.getvalue(), f"{dosya_adi}.xlsx")
-
-@st.cache_resource(show_spinner="Bağlantı Kuruluyor...")
-def get_credentials():
-    try:
-        # Önce Streamlit Cloud Secrets veya lokal secrets.toml içindeki google_kasa'yı arar
-        if "google_kasa" in st.secrets:
-            creds_dict = json.loads(st.secrets["google_kasa"])
-            return Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-    except: pass
-    
-    # Bulamazsa bilgisayarınızdaki anahtar.json dosyasına bakar (Lokal kullanım için yedek)
-    return Credentials.from_service_account_file(JSON_FILE, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-
-@st.cache_resource
-def get_client(): return gspread.authorize(get_credentials())
-def get_drive_service(): return build('drive', 'v3', credentials=get_credentials())
-client = get_client()
 
 @st.cache_data(ttl=5, show_spinner=False)
 def get_data(sheet_name):
@@ -277,6 +279,7 @@ st.markdown("""
     
     [data-testid="stSidebar"] { background-color: #F0F4F9 !important; border-right: none !important; }
     [data-testid="stSidebar"] hr { border-color: #DADCE0 !important; }
+    
     [data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child { display: none !important; }
     
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
@@ -286,8 +289,10 @@ st.markdown("""
     
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p { color: #202124 !important; margin: 0 !important; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background-color: #E1E5EA !important; }
+    
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"],
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background-color: #D3E3FD !important; }
+    
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p,
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color: #041E49 !important; font-weight: 700 !important; }
     
