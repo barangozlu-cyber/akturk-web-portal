@@ -29,25 +29,19 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.37 - Akıllı Hibrit Entegrasyon"
+VERSIYON = "Aktürk CRM v6.38 - Tam Güvenlikli Sürüm"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
-JSON_FILE = "anahtar.json"
 
-# 🎯 AKILLI ŞİFRE OKUYUCU (HİBRİT SİSTEM)
+# 🔐 ŞİFRELER SADECE SECRETS KASASINDAN ÇEKİLİYOR (TAM GÜVENLİK)
 try:
-    # Önce Streamlit Cloud ortamında (internette) miyiz diye bakar
     PORTAL_KULLANICI = st.secrets["PORTAL_KULLANICI"]
     PORTAL_SIFRE = st.secrets["PORTAL_SIFRE"]
     GONDEREN_MAIL = st.secrets["GONDEREN_MAIL"]
     MAIL_SIFRE = st.secrets["MAIL_SIFRE"]
-except KeyError:
-    # Eğer bulamazsa, demek ki lokal (sizin bilgisayarınızda) çalışıyor
-    # Lokal kullanım için manuel yedek şifreler (Kendi mail şifrenizi buraya ekleyin)
-    PORTAL_KULLANICI = "baran"
-    PORTAL_SIFRE = "akturk2026"
-    GONDEREN_MAIL = "sistem@akturksigorta.net"
-    MAIL_SIFRE = "gerçek_mail_şifreniz_buraya"
+except Exception:
+    st.error("🚨 Güvenlik Kasası Bulunamadı! Lütfen bilgisayarınızdaki .streamlit/secrets.toml dosyanızı oluşturun.")
+    st.stop()
 
 st.set_page_config(page_title="Aktürk Sigorta Portal", layout="wide", initial_sidebar_state="auto")
 
@@ -65,14 +59,13 @@ def ekran_temizle():
 @st.cache_resource(show_spinner="Bağlantı Kuruluyor...")
 def get_credentials():
     try:
-        # Önce Cloud'daki kasaya bakar
         if "google_kasa" in st.secrets:
             creds_dict = json.loads(st.secrets["google_kasa"])
             return Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
-    except: pass
-    
-    # Cloud'da bulamazsa direkt lokaldeki anahtar.json'u okur
-    return Credentials.from_service_account_file(JSON_FILE, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+    except Exception:
+        pass
+    st.error("🚨 Google Kasa verisi okunamadı. secrets.toml dosyasını kontrol edin.")
+    st.stop()
 
 @st.cache_resource
 def get_client(): return gspread.authorize(get_credentials())
@@ -310,13 +303,14 @@ st.markdown("""
 # ==========================================
 if not st.session_state["giris_yapildi"]:
     st.markdown("<div class='login-box'>", unsafe_allow_html=True)
+    
     st.markdown("""
-        <div style="background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px auto; box-shadow: 0 4px 15px rgba(41, 128, 185, 0.3);">
-            <span style="font-size: 40px; font-weight: 900; color: #FFFFFF;">A</span>
-        </div>
-        <h2 style='margin-top:0px; margin-bottom: 5px; color:#1A252F;'>Aktürk Sigorta</h2>
-        <p style='color: #7F8C8D; font-size: 15px; margin-bottom: 25px;'>Kurumsal Yönetim Portalı</p>
-    """, unsafe_allow_html=True)
+<div style="background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px auto; box-shadow: 0 4px 15px rgba(41, 128, 185, 0.3);">
+    <span style="font-size: 40px; font-weight: 900; color: #FFFFFF;">A</span>
+</div>
+<h2 style='margin-top:0px; margin-bottom: 5px; color:#1A252F;'>Aktürk Sigorta</h2>
+<p style='color: #7F8C8D; font-size: 15px; margin-bottom: 25px;'>Kurumsal Yönetim Portalı</p>
+""", unsafe_allow_html=True)
     
     tab1, tab2, tab3 = st.tabs(["🔐 Giriş Yap", "📝 Başvuru", "🔑 Şifremi Unuttum"])
     
@@ -380,16 +374,16 @@ if not st.session_state["giris_yapildi"]:
 # ==========================================
 else:
     st.sidebar.markdown("""
-        <div style='display: flex; align-items: center; margin-bottom: 25px; margin-top: 10px;'>
-            <div style='background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3);'>
-                <span style='font-size: 18px; font-weight: 900; color: #FFFFFF;'>A</span>
-            </div>
-            <div>
-                <h2 style='margin: 0; color: #202124; font-size: 20px;'>Aktürk CRM</h2>
-                <span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {}</span>
-            </div>
-        </div>
-    """.format(st.session_state['kullanici_adi'].upper()), unsafe_allow_html=True)
+<div style='display: flex; align-items: center; margin-bottom: 25px; margin-top: 10px;'>
+    <div style='background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3);'>
+        <span style='font-size: 18px; font-weight: 900; color: #FFFFFF;'>A</span>
+    </div>
+    <div>
+        <h2 style='margin: 0; color: #202124; font-size: 20px;'>Aktürk CRM</h2>
+        <span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {}</span>
+    </div>
+</div>
+""".format(st.session_state['kullanici_adi'].upper()), unsafe_allow_html=True)
     
     menu = st.sidebar.radio("", [
         "📥 Poliçe Girişi", 
