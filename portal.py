@@ -1,18 +1,4 @@
 import streamlit as st
-import streamlit as st
-# ==========================================
-# STREAMLIT İZLERİNİ TAMAMEN SİLME KODU
-# ==========================================
-gizleme_kodu = """
-<style>
-#MainMenu {visibility: hidden;} /* Sağ üstteki menüyü gizler */
-header {visibility: hidden;}    /* Deploy butonunu ve üst boşluğu tamamen gizler */
-footer {visibility: hidden;}    /* En alttaki 'Made with Streamlit' yazısını gizler */
-</style>
-"""
-st.markdown(gizleme_kodu, unsafe_allow_html=True)
-
-# ... senin kodlarının geri kalanı buradan devam etsin ...
 import pdfplumber
 import gspread
 from google.oauth2.service_account import Credentials
@@ -29,21 +15,39 @@ from email.mime.multipart import MIMEMultipart
 import difflib
 
 # ==========================================
+# STREAMLIT İZLERİNİ TAMAMEN SİLME KODU
+# ==========================================
+gizleme_kodu = """
+<style>
+#MainMenu {visibility: hidden;}
+header {visibility: hidden;}    
+footer {visibility: hidden;}    
+</style>
+"""
+st.markdown(gizleme_kodu, unsafe_allow_html=True)
+
+# ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.36 - Tam Sürüm (Secrets Entegreli)"
+VERSIYON = "Aktürk CRM v6.37 - Akıllı Hibrit Entegrasyon"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
+JSON_FILE = "anahtar.json"
 
-# 🔐 ŞİFRELER SECRETS KASASINDAN ÇEKİLİYOR
+# 🎯 AKILLI ŞİFRE OKUYUCU (HİBRİT SİSTEM)
 try:
+    # Önce Streamlit Cloud ortamında (internette) miyiz diye bakar
     PORTAL_KULLANICI = st.secrets["PORTAL_KULLANICI"]
     PORTAL_SIFRE = st.secrets["PORTAL_SIFRE"]
     GONDEREN_MAIL = st.secrets["GONDEREN_MAIL"]
     MAIL_SIFRE = st.secrets["MAIL_SIFRE"]
 except KeyError:
-    st.error("🚨 Güvenlik Anahtarları (Secrets) bulunamadı! Lütfen Streamlit Cloud Ayarlarından Secrets kısmını doldurun.")
-    st.stop()
+    # Eğer bulamazsa, demek ki lokal (sizin bilgisayarınızda) çalışıyor
+    # Lokal kullanım için manuel yedek şifreler (Kendi mail şifrenizi buraya ekleyin)
+    PORTAL_KULLANICI = "baran"
+    PORTAL_SIFRE = "akturk2026"
+    GONDEREN_MAIL = "sistem@akturksigorta.net"
+    MAIL_SIFRE = "gerçek_mail_şifreniz_buraya"
 
 st.set_page_config(page_title="Aktürk Sigorta Portal", layout="wide", initial_sidebar_state="auto")
 
@@ -58,27 +62,21 @@ def ekran_temizle():
         if key not in ["giris_yapildi", "kullanici_adi", "google_kasa"]:
             del st.session_state[key]
 
-@st.cache_resource(show_spinner="Google Bağlantısı Kuruluyor...")
+@st.cache_resource(show_spinner="Bağlantı Kuruluyor...")
 def get_credentials():
     try:
+        # Önce Cloud'daki kasaya bakar
         if "google_kasa" in st.secrets:
-            # Secrets içindeki JSON metnini sözlüğe çevirir
-            creds_info = json.loads(st.secrets["google_kasa"])
-            return Credentials.from_service_account_info(
-                creds_info, 
-                scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
-            )
-        else:
-            st.error("Secrets içinde 'google_kasa' anahtarı bulunamadı!")
-            st.stop()
-    except Exception as e:
-        st.error(f"Kimlik doğrulama hatası: {e}")
-        st.stop()
+            creds_dict = json.loads(st.secrets["google_kasa"])
+            return Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
+    except: pass
+    
+    # Cloud'da bulamazsa direkt lokaldeki anahtar.json'u okur
+    return Credentials.from_service_account_file(JSON_FILE, scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
 
 @st.cache_resource
 def get_client(): return gspread.authorize(get_credentials())
 def get_drive_service(): return build('drive', 'v3', credentials=get_credentials())
-
 client = get_client()
 
 def mail_gonder(alici, konu, icerik):
@@ -279,7 +277,6 @@ st.markdown("""
     
     [data-testid="stSidebar"] { background-color: #F0F4F9 !important; border-right: none !important; }
     [data-testid="stSidebar"] hr { border-color: #DADCE0 !important; }
-    
     [data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child { display: none !important; }
     
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
@@ -289,10 +286,8 @@ st.markdown("""
     
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p { color: #202124 !important; margin: 0 !important; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background-color: #E1E5EA !important; }
-    
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"],
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background-color: #D3E3FD !important; }
-    
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p,
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color: #041E49 !important; font-weight: 700 !important; }
     
@@ -406,9 +401,6 @@ else:
         "🔍 Tüm Arşiv"
     ], on_change=ekran_temizle, label_visibility="collapsed")
 
-    # ------------------------------------------
-    # 5.1 POLİÇE GİRİŞİ 
-    # ------------------------------------------
     if menu == "📥 Poliçe Girişi":
         st.header("📥 Yeni İşlem Kaydı")
         
@@ -554,9 +546,6 @@ else:
                     st.cache_data.clear()
                 st.success("Harika! İşlem başarıyla kaydedildi.")
 
-    # ------------------------------------------
-    # 5.2 CARİ & FİNANS 
-    # ------------------------------------------
     elif menu == "💰 Cari & Finans":
         st.header("💰 Gelişmiş Finans Yönetimi")
         t1, t2 = st.tabs(["🏢 Tali Acente & Merkez Poliçeleri", "👤 Müşteri Hesapları"])
@@ -723,9 +712,6 @@ else:
                             client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").append_row([m_tarih, "Müşteri Carisi", secilen_musteri, m_detay, m_borc, m_alc, "Nakit/Havale", 1], value_input_option='USER_ENTERED')
                             st.cache_data.clear(); st.rerun()
 
-    # ------------------------------------------
-    # 5.3 YENİLEME TAKVİMİ 
-    # ------------------------------------------
     elif menu == "📅 Yenileme Takvimi":
         st.header("📅 Özgür Yenileme Takibi")
         df_pol = get_data("Policeler")
@@ -768,9 +754,6 @@ else:
                 excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi")
             else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
 
-    # ------------------------------------------
-    # 5.4 ARAMA VE AYARLAR 
-    # ------------------------------------------
     elif menu == "🔎 Genel Arama":
         st.header("🔎 Gelişmiş Arama")
         df_pol = get_data("Policeler")
@@ -797,9 +780,6 @@ else:
                         oneri_metni = ", ".join(oneriler)
                         st.info(f"💡 **Bunu mu demek istediniz:** {oneri_metni}")
 
-    # ------------------------------------------
-    # 🛠️ DÜZELTME VE SİLME MERKEZİ 
-    # ------------------------------------------
     elif menu == "🛠️ Düzeltme & Silme":
         st.header("🛠️ Kayıt Düzeltme ve Silme Merkezi")
         t1, t2, t3 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Poliçe Sil (Ve Carisini)", "🗑️ Serbest Cari Kaydı Sil"])
@@ -855,8 +835,7 @@ else:
                                     if c_updates: ws_cari.update_cells(c_updates)
                             
                             st.success(f"Başarılı! Müşteri '{y_isim_temiz}' olarak tüm sistemde güncellendi.")
-                            st.cache_data.clear()
-                            st.rerun()
+                            st.cache_data.clear(); st.rerun()
 
         with t2:
             st.markdown("### Hatalı Poliçeyi Sil")
@@ -896,8 +875,7 @@ else:
                                             ws_cari.delete_rows(c_satir)
                                             
                                 st.success("Poliçe, PDF dosyası ve bağlı cari işlemler kalıcı olarak silindi!")
-                                st.cache_data.clear()
-                                st.rerun()
+                                st.cache_data.clear(); st.rerun()
                     else: st.warning("Eşleşen poliçe bulunamadı.")
                         
         with t3:
@@ -919,8 +897,7 @@ else:
                             c_satir_no = int(re.search(r'\(Satır:(\d+)\)', sil_c_sec).group(1))
                             client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").delete_rows(c_satir_no)
                             st.success("Cari kayıt başarıyla silindi!")
-                            st.cache_data.clear()
-                            st.rerun()
+                            st.cache_data.clear(); st.rerun()
                     else: st.warning("Cari kayıt bulunamadı.")
 
     elif menu == "⚙️ Ayarlar":
