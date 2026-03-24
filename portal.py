@@ -29,7 +29,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.38 - Tam Güvenlikli Sürüm"
+VERSIYON = "Aktürk CRM v6.39 - Tam Güvenlikli ve Arayüz Düzeltmeli Sürüm"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -225,78 +225,78 @@ STIL_AYARLARI = {"PDF Linki": st.column_config.LinkColumn("📄 Belge", display_
 # 3. KURUMSAL LİGHT TEMA VE MOBİL CSS
 # ==========================================
 st.markdown("""
-    <style>
-    .stApp { background-color: #F4F7F6 !important; color: #2C3E50 !important; }
-    h1, h2, h3 { color: #1A252F !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: 700; }
-    p, span, label { color: #2C3E50; }
-    
-    div[data-baseweb="select"] > div, 
-    div[data-baseweb="input"] > div,
-    textarea {
-        background-color: #FFFFFF !important; border: 1px solid #BDC3C7 !important; border-radius: 6px !important;
-    }
-    
-    input, textarea, div[data-baseweb="select"] *, div[data-baseweb="input"] * {
-        color: #1A252F !important; font-weight: 500 !important;
-    }
+<style>
+.stApp { background-color: #F4F7F6 !important; color: #2C3E50 !important; }
+h1, h2, h3 { color: #1A252F !important; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-weight: 700; }
+p, span, label { color: #2C3E50; }
 
-    ul[data-baseweb="menu"] { background-color: #FFFFFF !important; }
-    li[data-baseweb="menu-item"] { color: #1A252F !important; }
-    li[data-baseweb="menu-item"]:hover { background-color: #F4F7F6 !important; }
+div[data-baseweb="select"] > div, 
+div[data-baseweb="input"] > div,
+textarea {
+    background-color: #FFFFFF !important; border: 1px solid #BDC3C7 !important; border-radius: 6px !important;
+}
 
-    [data-testid="stDataEditor"] textarea,
-    [data-testid="stDataEditor"] input,
-    .glide-data-grid textarea,
-    .gdg-input {
-        background-color: #FFFFFF !important;
-        color: #1A252F !important;
-        caret-color: #1A252F !important;
-        font-weight: 600 !important;
-    }
+input, textarea, div[data-baseweb="select"] *, div[data-baseweb="input"] * {
+    color: #1A252F !important; font-weight: 500 !important;
+}
 
-    .stButton>button { 
-        background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%) !important; 
-        color: #FFFFFF !important; font-weight: 600 !important; 
-        border-radius: 6px !important; border: none !important;
-        transition: all 0.3s ease !important; box-shadow: 0 4px 6px rgba(41, 128, 185, 0.2) !important; 
-    }
-    .stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(41, 128, 185, 0.4) !important; color: #FFFFFF !important; }
-    
-    .login-box { background-color: #FFFFFF; padding: 40px; border-radius: 12px; border: 1px solid #EAECEE; text-align: center; max-width: 450px; margin: auto; margin-top: 5vh; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-    div[data-testid="stForm"] { background-color: #FFFFFF; padding: 25px; border-radius: 12px; border: 1px solid #EAECEE; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
-    div[data-testid="stMetric"] { background-color: #FFFFFF !important; border-radius: 8px !important; padding: 15px 20px !important; border: 1px solid #EAECEE !important; border-left: 4px solid #2980B9 !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important; }
-    div[data-testid="stMetricValue"] { color: #2C3E50 !important; font-weight: bold !important; }
-    div[data-testid="stMetricLabel"] { color: #7F8C8D !important; font-size: 14px !important; }
-    
-    [data-testid="stSidebar"] { background-color: #F0F4F9 !important; border-right: none !important; }
-    [data-testid="stSidebar"] hr { border-color: #DADCE0 !important; }
-    [data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child { display: none !important; }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
-        padding: 10px 16px !important; margin-bottom: 4px !important; border-radius: 24px !important;
-        transition: background-color 0.2s ease !important; cursor: pointer !important; width: 100% !important;
-    }
-    
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p { color: #202124 !important; margin: 0 !important; }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background-color: #E1E5EA !important; }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"],
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background-color: #D3E3FD !important; }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p,
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color: #041E49 !important; font-weight: 700 !important; }
-    
-    @media (max-width: 768px) {
-        .login-box { padding: 25px 15px !important; margin-top: 2vh !important; width: 92% !important; }
-        div[data-testid="stMetric"] { padding: 10px !important; margin-bottom: 10px !important; }
-        div[data-testid="stMetricValue"] { font-size: 1.4rem !important; }
-        div[data-testid="stMetricLabel"] { font-size: 12px !important; }
-        h1 { font-size: 1.6rem !important; }
-        h2 { font-size: 1.4rem !important; }
-        h3 { font-size: 1.2rem !important; }
-        .stButton>button { padding: 0.6rem !important; width: 100% !important; font-size: 16px !important; }
-        div[data-testid="stForm"] { padding: 15px !important; }
-    }
-    </style>
-    """, unsafe_allow_html=True)
+ul[data-baseweb="menu"] { background-color: #FFFFFF !important; }
+li[data-baseweb="menu-item"] { color: #1A252F !important; }
+li[data-baseweb="menu-item"]:hover { background-color: #F4F7F6 !important; }
+
+[data-testid="stDataEditor"] textarea,
+[data-testid="stDataEditor"] input,
+.glide-data-grid textarea,
+.gdg-input {
+    background-color: #FFFFFF !important;
+    color: #1A252F !important;
+    caret-color: #1A252F !important;
+    font-weight: 600 !important;
+}
+
+.stButton>button { 
+    background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%) !important; 
+    color: #FFFFFF !important; font-weight: 600 !important; 
+    border-radius: 6px !important; border: none !important;
+    transition: all 0.3s ease !important; box-shadow: 0 4px 6px rgba(41, 128, 185, 0.2) !important; 
+}
+.stButton>button:hover { transform: translateY(-2px); box-shadow: 0 6px 12px rgba(41, 128, 185, 0.4) !important; color: #FFFFFF !important; }
+
+.login-box { background-color: #FFFFFF; padding: 40px; border-radius: 12px; border: 1px solid #EAECEE; text-align: center; max-width: 450px; margin: auto; margin-top: 5vh; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+div[data-testid="stForm"] { background-color: #FFFFFF; padding: 25px; border-radius: 12px; border: 1px solid #EAECEE; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+div[data-testid="stMetric"] { background-color: #FFFFFF !important; border-radius: 8px !important; padding: 15px 20px !important; border: 1px solid #EAECEE !important; border-left: 4px solid #2980B9 !important; box-shadow: 0 2px 8px rgba(0,0,0,0.03) !important; }
+div[data-testid="stMetricValue"] { color: #2C3E50 !important; font-weight: bold !important; }
+div[data-testid="stMetricLabel"] { color: #7F8C8D !important; font-size: 14px !important; }
+
+[data-testid="stSidebar"] { background-color: #F0F4F9 !important; border-right: none !important; }
+[data-testid="stSidebar"] hr { border-color: #DADCE0 !important; }
+[data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child { display: none !important; }
+
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+    padding: 10px 16px !important; margin-bottom: 4px !important; border-radius: 24px !important;
+    transition: background-color 0.2s ease !important; cursor: pointer !important; width: 100% !important;
+}
+
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p { color: #202124 !important; margin: 0 !important; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background-color: #E1E5EA !important; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"],
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background-color: #D3E3FD !important; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p,
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color: #041E49 !important; font-weight: 700 !important; }
+
+@media (max-width: 768px) {
+    .login-box { padding: 25px 15px !important; margin-top: 2vh !important; width: 92% !important; }
+    div[data-testid="stMetric"] { padding: 10px !important; margin-bottom: 10px !important; }
+    div[data-testid="stMetricValue"] { font-size: 1.4rem !important; }
+    div[data-testid="stMetricLabel"] { font-size: 12px !important; }
+    h1 { font-size: 1.6rem !important; }
+    h2 { font-size: 1.4rem !important; }
+    h3 { font-size: 1.2rem !important; }
+    .stButton>button { padding: 0.6rem !important; width: 100% !important; font-size: 16px !important; }
+    div[data-testid="stForm"] { padding: 15px !important; }
+}
+</style>
+""", unsafe_allow_html=True)
 
 # ==========================================
 # 4. GİRİŞ VE ÜYELİK SİSTEMİ 
@@ -306,7 +306,7 @@ if not st.session_state["giris_yapildi"]:
     
     st.markdown("""
 <div style="background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 15px auto; box-shadow: 0 4px 15px rgba(41, 128, 185, 0.3);">
-    <span style="font-size: 40px; font-weight: 900; color: #FFFFFF;">A</span>
+<span style="font-size: 40px; font-weight: 900; color: #FFFFFF;">A</span>
 </div>
 <h2 style='margin-top:0px; margin-bottom: 5px; color:#1A252F;'>Aktürk Sigorta</h2>
 <p style='color: #7F8C8D; font-size: 15px; margin-bottom: 25px;'>Kurumsal Yönetim Portalı</p>
@@ -375,13 +375,13 @@ if not st.session_state["giris_yapildi"]:
 else:
     st.sidebar.markdown("""
 <div style='display: flex; align-items: center; margin-bottom: 25px; margin-top: 10px;'>
-    <div style='background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3);'>
-        <span style='font-size: 18px; font-weight: 900; color: #FFFFFF;'>A</span>
-    </div>
-    <div>
-        <h2 style='margin: 0; color: #202124; font-size: 20px;'>Aktürk CRM</h2>
-        <span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {}</span>
-    </div>
+<div style='background: linear-gradient(135deg, #2980B9 0%, #2471A3 100%); width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-right: 12px; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3);'>
+<span style='font-size: 18px; font-weight: 900; color: #FFFFFF;'>A</span>
+</div>
+<div>
+<h2 style='margin: 0; color: #202124; font-size: 20px;'>Aktürk CRM</h2>
+<span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {}</span>
+</div>
 </div>
 """.format(st.session_state['kullanici_adi'].upper()), unsafe_allow_html=True)
     
