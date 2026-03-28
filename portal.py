@@ -29,7 +29,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.40 - Akıllı Finans ve Kusursuz Sayı Motoru"
+VERSIYON = "Aktürk CRM v6.41 - Kusursuz Kesir ve Virgül Motoru"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -103,16 +103,17 @@ def sayiya_cevir(deger):
     deger_str = deger_str.rstrip('.,')
     if not deger_str: return 0.0
     
+    # KUSURSUZ VİRGÜL VE KESİR MOTORU
     if '.' in deger_str and ',' in deger_str:
         if deger_str.rfind(',') > deger_str.rfind('.'):
             deger_str = deger_str.replace('.', '').replace(',', '.')
         else:
             deger_str = deger_str.replace(',', '')
     elif ',' in deger_str:
-        parts = deger_str.split(',')
-        if len(parts) > 2 or (len(parts) == 2 and len(parts[-1]) == 3):
+        if deger_str.count(',') > 1:
             deger_str = deger_str.replace(',', '')
         else:
+            # Türkiye'de tek virgül HER ZAMAN ondalık ayırıcıdır (Örn: 387,498 veya 15,125)
             deger_str = deger_str.replace(',', '.')
     elif '.' in deger_str:
         parts = deger_str.split('.')
@@ -638,29 +639,17 @@ else:
                                 old_row = df_to_edit.loc[idx]
                                 new_row = edited_df.loc[idx]
                                 
-                                eski_net = float(sayiya_cevir(old_row["Net Prim"]))
-                                yeni_net = float(sayiya_cevir(new_row["Net Prim"]))
-                                eski_brut = float(sayiya_cevir(old_row["Brüt Prim"]))
-                                yeni_brut = float(sayiya_cevir(new_row["Brüt Prim"]))
-                                eski_kom = float(sayiya_cevir(old_row["Şirket Komisyonu"]))
-                                yeni_kom = float(sayiya_cevir(new_row["Şirket Komisyonu"]))
-                                
-                                if eski_net != yeni_net or eski_brut != yeni_brut or eski_kom != yeni_kom:
+                                if not old_row.equals(new_row):
                                     sheet_row = int(filtrelenmis_policeler.loc[idx, "Sheet_Row"])
-                                    
-                                    if eski_net != yeni_net:
-                                        col_idx = headers.index("Net Prim") + 1
-                                        cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=yeni_net))
-                                    if eski_brut != yeni_brut:
-                                        col_idx = headers.index("Brüt Prim") + 1
-                                        cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=yeni_brut))
-                                    if eski_kom != yeni_kom:
-                                        col_idx = headers.index("Şirket Komisyonu") + 1
-                                        cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=yeni_kom))
+                                    for col in ["Net Prim", "Brüt Prim", "Şirket Komisyonu"]:
+                                        if old_row[col] != new_row[col]:
+                                            col_idx = headers.index(col) + 1
+                                            val = float(sayiya_cevir(new_row[col]))
+                                            cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=val))
                             
                             if cells_to_update:
                                 ws_pol.update_cells(cells_to_update, value_input_option='USER_ENTERED')
-                                st.success(f"🎉 Harika! Toplam {len(cells_to_update)} hücre güncellendi.")
+                                st.success(f"🎉 Harika! Toplam {len(cells_to_update)} adet veri güncellendi.")
                                 st.cache_data.clear(); st.rerun()
                             else: st.info("Herhangi bir değişiklik algılanmadı.")
                     
