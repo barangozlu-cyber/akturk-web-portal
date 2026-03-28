@@ -157,16 +157,26 @@ def excel_indir(df, buton_metni, dosya_adi):
     df_export = df.copy()
     if not df_export.empty:
         toplamlar = {}
-        for col in df_export.columns:
+        satir_sayisi = len(df_export)
+        for i, col in enumerate(df_export.columns):
+            # Excel sütun harfini dinamik hesapla (A, B, C... AA, AB)
+            harf = chr(65 + i) if i < 26 else chr(64 + i // 26) + chr(65 + i % 26)
+            
             if col in ["Net Prim", "Brüt Prim", "Şirket Komisyonu", "Şirket Komisyonu (TL)", "Aktürk Sigorta Kazancı", "Borc", "Alacak"]:
-                toplamlar[col] = df_export[col].sum()
-            elif col == df_export.columns[0]: toplamlar[col] = "GENEL TOPLAM"
-            else: toplamlar[col] = ""
+                # Statik rakam yerine, Excel'in kendi Toplama formülünü (İngilizce/Türkçe Excel uyumlu) yazıyoruz
+                toplamlar[col] = f"=SUM({harf}2:{harf}{satir_sayisi+1})"
+            elif col == df_export.columns[0]: 
+                toplamlar[col] = "GENEL TOPLAM"
+            else: 
+                toplamlar[col] = ""
+                
         df_export = pd.concat([df_export, pd.DataFrame([toplamlar])], ignore_index=True)
+        
     out = io.BytesIO()
-    with pd.ExcelWriter(out, engine='openpyxl') as writer: df_export.to_excel(writer, index=False)
+    with pd.ExcelWriter(out, engine='openpyxl') as writer: 
+        df_export.to_excel(writer, index=False)
     st.download_button(f"📥 {buton_metni}", out.getvalue(), f"{dosya_adi}.xlsx")
-
+    
 @st.cache_data(ttl=5, show_spinner=False)
 def get_data(sheet_name):
     try:
