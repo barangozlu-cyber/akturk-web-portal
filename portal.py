@@ -29,7 +29,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v6.50 (28 Mart Güncellemesi)"
+VERSIYON = "v6.52 (28 Mart Revizyonu)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -103,7 +103,6 @@ def sayiya_cevir(deger):
     deger_str = deger_str.rstrip('.,')
     if not deger_str: return 0.0
     
-    # KUSURSUZ VİRGÜL VE KESİR MOTORU
     if '.' in deger_str and ',' in deger_str:
         if deger_str.rfind(',') > deger_str.rfind('.'):
             deger_str = deger_str.replace('.', '').replace(',', '.')
@@ -113,7 +112,6 @@ def sayiya_cevir(deger):
         if deger_str.count(',') > 1:
             deger_str = deger_str.replace(',', '')
         else:
-            # Türkiye'de tek virgül HER ZAMAN ondalık ayırıcıdır
             deger_str = deger_str.replace(',', '.')
     elif '.' in deger_str:
         parts = deger_str.split('.')
@@ -146,6 +144,9 @@ def df_gorsel_yap(df, para_sutunlari):
     df_gorsel = df.copy()
     for col in para_sutunlari:
         if col in df_gorsel.columns: df_gorsel[col] = df_gorsel[col].apply(para_format)
+    # PDF Linki "Yok" ise Streamlit'in sahte link oluşturmasını engeller
+    if "PDF Linki" in df_gorsel.columns:
+        df_gorsel["PDF Linki"] = df_gorsel["PDF Linki"].apply(lambda x: None if pd.isna(x) or str(x).strip() in ["Yok", ""] else x)
     return df_gorsel
 
 def tarih_formatla(tarih_degeri):
@@ -159,11 +160,9 @@ def excel_indir(df, buton_metni, dosya_adi):
         toplamlar = {}
         satir_sayisi = len(df_export)
         for i, col in enumerate(df_export.columns):
-            # Excel sütun harfini dinamik hesapla (A, B, C... AA, AB)
             harf = chr(65 + i) if i < 26 else chr(64 + i // 26) + chr(65 + i % 26)
             
             if col in ["Net Prim", "Brüt Prim", "Şirket Komisyonu", "Şirket Komisyonu (TL)", "Aktürk Sigorta Kazancı", "Borc", "Alacak"]:
-                # Statik rakam yerine, Excel'in kendi Toplama formülünü (İngilizce/Türkçe Excel uyumlu) yazıyoruz
                 toplamlar[col] = f"=SUM({harf}2:{harf}{satir_sayisi+1})"
             elif col == df_export.columns[0]: 
                 toplamlar[col] = "GENEL TOPLAM"
@@ -451,16 +450,14 @@ else:
                         p_data.update(klasik_analiz(txt))
                         st.success("PDF Tarandı! Lütfen boşlukları kontrol edip kaydedin.")
 
-        # İŞLEM TÜRÜNÜ VE ANA POLİÇE SEÇİMİNİ FORMDAN DIŞARI ALDIK Kİ ANINDA TEPKİ VERSİN
         st.markdown("### 📝 İşlem Türü ve Bağlantı")
-        islem_turu = st.radio("Bu kaydın amacı nedir?", ["🟢 Normal Poliçe / Yenileme", "🔴 Tam İptal / Satış (Seneye Yenilenmeyecek)", "🟡 Kısmi İptal / Teminat Düşürme (Seneye Yenilenecek)"])
+        islem_turu = st.radio("Bu kaydın amacı nedir?", ["Yeni Poliçe / Yenileme", "İptal / Satış", "Zeyl / Teminat Düşürme"])
         
         ana_pol_data = {}
-        if islem_turu != "🟢 Normal Poliçe / Yenileme":
+        if islem_turu != "Yeni Poliçe / Yenileme":
             df_pol_mevcut = get_data("Policeler")
             if not df_pol_mevcut.empty:
                 st.info("💡 **Bağlantı Motoru:** Aşağıdan işlem yapacağınız asıl (ana) poliçeyi seçin. Seçtiğinizde Müşteri, Plaka ve Şirket bilgileri aşağıdaki forma otomatik ve hatasız olarak doldurulacaktır.")
-                # Benzersiz ve detaylı bir liste oluşturuyoruz
                 df_pol_mevcut["Ozet"] = df_pol_mevcut["Plaka"] + " | " + df_pol_mevcut["Müşteri Adı Soyadı"] + " | " + df_pol_mevcut["Sigorta Türü"] + " | No: " + df_pol_mevcut["Poliçe No"]
                 liste = ["Lütfen Bağlanacak Ana Poliçeyi Seçin..."] + df_pol_mevcut["Ozet"].dropna().unique().tolist()
                 
@@ -479,7 +476,6 @@ else:
             bit = c3.text_input("Bitiş", p_data["bitis"])
             
             c4, c5, c6 = st.columns(3)
-            # Eğer ana poliçe seçildiyse PDF'i ezip asıl poliçedeki birebir aynı ismi ve bilgileri yazdırır
             def_mus = ana_pol_data.get("Müşteri Adı Soyadı", p_data["musteri"]) if ana_pol_data else p_data["musteri"]
             def_tc = ana_pol_data.get("TC / VKN", p_data["tc_vkn"]) if ana_pol_data else p_data["tc_vkn"]
             
@@ -529,27 +525,28 @@ else:
                     doc = client.open_by_key(SHEET_ID)
                     aktif_acente = acn
                     mus = temiz_isim(mus_girdi)
+                    # Plakayı kaydederken aradaki tüm boşlukları yok edip büyük harfe çeviriyoruz ki bağlam motoru hatasız çalışsın
+                    plk_temiz = str(plk).replace(" ", "").upper()
                     
                     net = float(sayiya_cevir(net_girdi))
                     brut = float(sayiya_cevir(brut_girdi))
                     kom_manuel = float(sayiya_cevir(kom_girdi))
                     
                     islem_notu = ""
-                    # Ana poliçeye bağlandığını belirten özel not
                     baglanti_notu = f" (Asıl Poliçe No: {ana_pol_data.get('Poliçe No', '')})" if ana_pol_data else ""
                     
-                    if islem_turu != "🟢 Normal Poliçe / Yenileme":
+                    if islem_turu != "Yeni Poliçe / Yenileme":
                         net = -abs(net)
                         brut = -abs(brut)
                         kom_manuel = -abs(kom_manuel) if kom_manuel > 0 else 0.0
-                        if "Tam İptal" in islem_turu:
+                        if islem_turu == "İptal / Satış":
                             sir = f"{sir} (İPTAL-SATIŞ)"
                             islem_notu = f"SATIŞ/TAM İPTAL{baglanti_notu}"
                         else:
                             sir = f"{sir} (İPTAL-ZEYL)"
                             islem_notu = f"KISMİ İPTAL/ZEYL{baglanti_notu}"
                     
-                    link = drive_pdf_yukle(f_bytes, f"{mus}_{plk}_{sir}.pdf") if f_bytes else "Yok"
+                    link = drive_pdf_yukle(f_bytes, f"{mus}_{plk_temiz}_{sir}.pdf") if f_bytes else "Yok"
                     
                     u_oran = float(sayiya_cevir(dict_urun.get(urn, 0.0)))
                     if u_oran > 1: u_oran /= 100 
@@ -570,7 +567,6 @@ else:
                     akturk_kazanci = float(sirket_komisyonu * t_oran)
                     islem_tarihi = tarih_formatla(tan)
                     
-                    # Veritabanında poliçe numarasına zeyli olduğu poliçeyi ekler
                     final_pno = pno + baglanti_notu if baglanti_notu else pno
                     
                     ws_pol = doc.worksheet("Policeler")
@@ -582,17 +578,16 @@ else:
                     row_dict = {
                         "Tanzim Tarihi": islem_tarihi, "Başlangıç Tarihi": bas, "Bitiş Tarihi": bit,
                         "Müşteri Adı Soyadı": mus, "TC / VKN": tc, "Sigorta Şirketi": sir,
-                        "Sigorta Türü": urn, "Poliçe No": final_pno, "Plaka": plk,
+                        "Sigorta Türü": urn, "Poliçe No": final_pno, "Plaka": plk_temiz,
                         "Net Prim": net, "Brüt Prim": brut, "Şirket Komisyonu": sirket_komisyonu,
                         "Acente": aktif_acente, "Adres": adr, "Telefon / E-mail": ilet, "PDF Linki": link
                     }
                     yeni_satir = [row_dict.get(h, "") for h in headers]
                     ws_pol.append_row(yeni_satir, value_input_option='USER_ENTERED')
                     
-                    aciklama = f"{sir.replace(' (İPTAL-SATIŞ)', '').replace(' (İPTAL-ZEYL)', '')} - {urn} - Plaka: {plk}"
+                    aciklama = f"{sir.replace(' (İPTAL-SATIŞ)', '').replace(' (İPTAL-ZEYL)', '')} - {urn} - Plaka: {plk_temiz}"
                     yeni_satirlar = []
                     
-                    # Cari dökümlerde de net olarak Asıl Poliçe No'sunu belirtir
                     if islem_notu: 
                         yeni_satirlar.append([islem_tarihi, "Müşteri Carisi", mus, f"{islem_notu} İADESİ - {aciklama}", brut, 0.0, odm, taksit])
                     else: 
@@ -607,7 +602,7 @@ else:
                     doc.worksheet("Cari_Islemler").append_rows(yeni_satirlar, value_input_option='USER_ENTERED')
                     doc.worksheet("Musteriler").append_row([mus, tc, ilet, brut], value_input_option='USER_ENTERED')
                     st.cache_data.clear()
-                st.success("Harika! İşlem, ana poliçeye bağlanarak başarıyla kaydedildi.")
+                st.success("Harika! İşlem başarıyla kaydedildi.")
 
     elif menu == "💰 Cari & Finans":
         st.header("💰 Gelişmiş Finans Yönetimi")
@@ -817,7 +812,8 @@ else:
                 gosterim = ["DURUM", "Kalan Gün", "Bitiş Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Sigorta Şirketi", "Telefon / E-mail"]
                 if "PDF Linki" in takvim.columns: gosterim.append("PDF Linki")
                 
-                st.dataframe(takvim[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
+                df_ui_takvim = df_gorsel_yap(takvim, [])
+                st.dataframe(df_ui_takvim[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
                 excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi")
             else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
 
@@ -832,17 +828,16 @@ else:
                 sonuc = df_pol[mask].copy()
                 
                 if not sonuc.empty:
-                    tab1, tab2 = st.tabs(["🔗 Bağlamlı Görünüm (Polisoft Tarzı)", "📋 Klasik Liste Görünümü"])
+                    tab1, tab2 = st.tabs(["🔗 Bağlamlı Görünüm", "📋 Klasik Liste Görünümü"])
                     
                     with tab1:
-                        # Bağlam anahtarı: Plaka ve Ürün aynı ise (İsim hatalı yazılsa bile) bunları tek dosyada birleştir.
-                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Plaka: {x['Plaka']} | Ürün: {x['Sigorta Türü']} | Şirket: {x['Sigorta Şirketi'].split('(')[0].strip()}", axis=1)
+                        # Bağlam anahtarı: Plakadaki tüm boşlukları siler, her şeyi büyük harf yapar.
+                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Plaka: {str(x['Plaka']).replace(' ', '').upper()} | Ürün: {str(x['Sigorta Türü']).strip()} | Şirket: {str(x['Sigorta Şirketi']).split('(')[0].strip().upper()}", axis=1)
                         gruplar = sonuc.groupby('Baglam_Key')
                         
                         st.info("💡 Alt poliçeleri (Zeyl, İptal, Yenileme) görmek için klasörlerin üzerine tıklayın.")
                         
                         for key, grup in gruplar:
-                            # Plakası olmayan boş kayıtları klasörlemiyoruz
                             if "Plaka:  |" not in key:
                                 net_toplam = grup["Net Prim"].apply(sayiya_cevir).sum()
                                 brut_toplam = grup["Brüt Prim"].apply(sayiya_cevir).sum()
