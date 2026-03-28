@@ -7,7 +7,7 @@ from googleapiclient.http import MediaIoBaseUpload
 import pandas as pd
 import re
 from datetime import datetime, timedelta
-import io 
+import io
 import json
 import smtplib
 from email.mime.text import MIMEText
@@ -29,7 +29,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.42 - Toplu Cari ve Rakam Onarım Motoru"
+VERSIYON = "v6.50 (28 Mart Güncellemesi)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -410,10 +410,11 @@ else:
 </div>
 <div>
 <h2 style='margin: 0; color: #202124; font-size: 20px;'>Aktürk CRM</h2>
-<span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {}</span>
+<span style='color: #5F6368; font-size: 13px; font-weight: 500;'>Kullanıcı: {0}</span><br>
+<span style='color: #2980B9; font-size: 11px; font-weight: 800; background-color: #D4E6F1; padding: 2px 6px; border-radius: 4px;'>{1}</span>
 </div>
 </div>
-""".format(st.session_state['kullanici_adi'].upper()), unsafe_allow_html=True)
+""".format(st.session_state['kullanici_adi'].upper(), VERSIYON), unsafe_allow_html=True)
     
     menu = st.sidebar.radio("", [
         "📥 Poliçe Girişi", 
@@ -450,11 +451,27 @@ else:
                         p_data.update(klasik_analiz(txt))
                         st.success("PDF Tarandı! Lütfen boşlukları kontrol edip kaydedin.")
 
-        with st.form("police_formu", clear_on_submit=True):
-            st.markdown("### 📝 İşlem Türünü Seçin")
-            islem_turu = st.radio("Bu kaydın amacı nedir?", ["🟢 Normal Poliçe / Yenileme", "🔴 Tam İptal / Satış (Seneye Yenilenmeyecek)", "🟡 Kısmi İptal / Teminat Düşürme (Seneye Yenilenecek)"])
-            st.divider()
+        # İŞLEM TÜRÜNÜ VE ANA POLİÇE SEÇİMİNİ FORMDAN DIŞARI ALDIK Kİ ANINDA TEPKİ VERSİN
+        st.markdown("### 📝 İşlem Türü ve Bağlantı")
+        islem_turu = st.radio("Bu kaydın amacı nedir?", ["🟢 Normal Poliçe / Yenileme", "🔴 Tam İptal / Satış (Seneye Yenilenmeyecek)", "🟡 Kısmi İptal / Teminat Düşürme (Seneye Yenilenecek)"])
+        
+        ana_pol_data = {}
+        if islem_turu != "🟢 Normal Poliçe / Yenileme":
+            df_pol_mevcut = get_data("Policeler")
+            if not df_pol_mevcut.empty:
+                st.info("💡 **Bağlantı Motoru:** Aşağıdan işlem yapacağınız asıl (ana) poliçeyi seçin. Seçtiğinizde Müşteri, Plaka ve Şirket bilgileri aşağıdaki forma otomatik ve hatasız olarak doldurulacaktır.")
+                # Benzersiz ve detaylı bir liste oluşturuyoruz
+                df_pol_mevcut["Ozet"] = df_pol_mevcut["Plaka"] + " | " + df_pol_mevcut["Müşteri Adı Soyadı"] + " | " + df_pol_mevcut["Sigorta Türü"] + " | No: " + df_pol_mevcut["Poliçe No"]
+                liste = ["Lütfen Bağlanacak Ana Poliçeyi Seçin..."] + df_pol_mevcut["Ozet"].dropna().unique().tolist()
+                
+                secim = st.selectbox("🔗 İptal/Zeyil Edilecek Ana Poliçe:", liste)
+                if secim != "Lütfen Bağlanacak Ana Poliçeyi Seçin...":
+                    secilen_satir = df_pol_mevcut[df_pol_mevcut["Ozet"] == secim].iloc[0]
+                    ana_pol_data = secilen_satir.to_dict()
+        
+        st.divider()
 
+        with st.form("police_formu", clear_on_submit=True):
             st.subheader("1. Müşteri ve İşlem Detayları")
             c1, c2, c3 = st.columns(3)
             tan = c1.text_input("Tanzim Tarihi", p_data["tanzim"])
@@ -462,19 +479,28 @@ else:
             bit = c3.text_input("Bitiş", p_data["bitis"])
             
             c4, c5, c6 = st.columns(3)
-            mus_girdi = c4.text_input("Müşteri Ad Soyad", p_data["musteri"])
-            tc = c5.text_input("TC / VKN", p_data["tc_vkn"])
-            ilet = c6.text_input("Telefon / E-mail", "")
+            # Eğer ana poliçe seçildiyse PDF'i ezip asıl poliçedeki birebir aynı ismi ve bilgileri yazdırır
+            def_mus = ana_pol_data.get("Müşteri Adı Soyadı", p_data["musteri"]) if ana_pol_data else p_data["musteri"]
+            def_tc = ana_pol_data.get("TC / VKN", p_data["tc_vkn"]) if ana_pol_data else p_data["tc_vkn"]
+            
+            mus_girdi = c4.text_input("Müşteri Ad Soyad", def_mus)
+            tc = c5.text_input("TC / VKN", def_tc)
+            ilet = c6.text_input("Telefon / E-mail", ana_pol_data.get("Telefon / E-mail", ""))
             
             c7, c8, c9 = st.columns(3)
-            sir = c7.text_input("Sigorta Şirketi", p_data["sirket"])
-            pno = c8.text_input("Poliçe No", p_data["p_no"])
-            plk = c9.text_input("Plaka", p_data["plaka"])
+            def_sir = str(ana_pol_data.get("Sigorta Şirketi", p_data["sirket"])).replace(" (İPTAL-SATIŞ)", "").replace(" (İPTAL-ZEYL)", "") if ana_pol_data else p_data["sirket"]
+            def_plk = ana_pol_data.get("Plaka", p_data["plaka"]) if ana_pol_data else p_data["plaka"]
+            
+            sir = c7.text_input("Sigorta Şirketi", def_sir)
+            pno = c8.text_input("Poliçe No (Bu zeylin/işlemin numarası)", p_data["p_no"])
+            plk = c9.text_input("Plaka", def_plk)
             
             st.subheader("2. Finans, Komisyon ve Ödeme")
             c10, c11, c12, c12_kom = st.columns(4)
             
-            urun_index = urun_listesi.index(p_data["urun"]) if p_data["urun"] in urun_listesi else 0
+            def_urun = ana_pol_data.get("Sigorta Türü", p_data["urun"]) if ana_pol_data else p_data["urun"]
+            urun_index = urun_listesi.index(def_urun) if def_urun in urun_listesi else 0
+            
             urn = c10.selectbox("Ürün Türü", urun_listesi, index=urun_index)
             
             net_val = "" if p_data["net_prim"] == 0.0 else str(p_data["net_prim"])
@@ -496,7 +522,7 @@ else:
                 
             odm = c14.selectbox("Tahsilat Durumu", ["Nakit Alındı", "Müşteri Kredi Kartı", "Havale", "Acenteye Borçlanıldı (Cari)"])
             taksit = c15.number_input("Taksit", min_value=1, value=1)
-            adr = st.text_area("Adres", "")
+            adr = st.text_area("Adres", ana_pol_data.get("Adres", ""))
             
             if st.form_submit_button("✅ POLİÇEYİ, CARİYİ VE PDF'İ KAYDET"):
                 with st.spinner("Sisteme İşleniyor..."):
@@ -509,16 +535,19 @@ else:
                     kom_manuel = float(sayiya_cevir(kom_girdi))
                     
                     islem_notu = ""
+                    # Ana poliçeye bağlandığını belirten özel not
+                    baglanti_notu = f" (Asıl Poliçe No: {ana_pol_data.get('Poliçe No', '')})" if ana_pol_data else ""
+                    
                     if islem_turu != "🟢 Normal Poliçe / Yenileme":
                         net = -abs(net)
                         brut = -abs(brut)
                         kom_manuel = -abs(kom_manuel) if kom_manuel > 0 else 0.0
                         if "Tam İptal" in islem_turu:
                             sir = f"{sir} (İPTAL-SATIŞ)"
-                            islem_notu = "SATIŞ/TAM İPTAL"
+                            islem_notu = f"SATIŞ/TAM İPTAL{baglanti_notu}"
                         else:
                             sir = f"{sir} (İPTAL-ZEYL)"
-                            islem_notu = "KISMİ İPTAL/ZEYL"
+                            islem_notu = f"KISMİ İPTAL/ZEYL{baglanti_notu}"
                     
                     link = drive_pdf_yukle(f_bytes, f"{mus}_{plk}_{sir}.pdf") if f_bytes else "Yok"
                     
@@ -541,6 +570,9 @@ else:
                     akturk_kazanci = float(sirket_komisyonu * t_oran)
                     islem_tarihi = tarih_formatla(tan)
                     
+                    # Veritabanında poliçe numarasına zeyli olduğu poliçeyi ekler
+                    final_pno = pno + baglanti_notu if baglanti_notu else pno
+                    
                     ws_pol = doc.worksheet("Policeler")
                     headers = ws_pol.row_values(1)
                     if "Şirket Komisyonu" not in headers:
@@ -550,25 +582,32 @@ else:
                     row_dict = {
                         "Tanzim Tarihi": islem_tarihi, "Başlangıç Tarihi": bas, "Bitiş Tarihi": bit,
                         "Müşteri Adı Soyadı": mus, "TC / VKN": tc, "Sigorta Şirketi": sir,
-                        "Sigorta Türü": urn, "Poliçe No": pno, "Plaka": plk,
+                        "Sigorta Türü": urn, "Poliçe No": final_pno, "Plaka": plk,
                         "Net Prim": net, "Brüt Prim": brut, "Şirket Komisyonu": sirket_komisyonu,
                         "Acente": aktif_acente, "Adres": adr, "Telefon / E-mail": ilet, "PDF Linki": link
                     }
                     yeni_satir = [row_dict.get(h, "") for h in headers]
                     ws_pol.append_row(yeni_satir, value_input_option='USER_ENTERED')
                     
-                    aciklama = f"{sir} - {urn} - Plaka: {plk}"
+                    aciklama = f"{sir.replace(' (İPTAL-SATIŞ)', '').replace(' (İPTAL-ZEYL)', '')} - {urn} - Plaka: {plk}"
                     yeni_satirlar = []
-                    if islem_notu: yeni_satirlar.append([islem_tarihi, "Müşteri Carisi", mus, f"{islem_notu} İADESİ - {aciklama}", brut, 0.0, odm, taksit])
-                    else: yeni_satirlar.append([islem_tarihi, "Müşteri Carisi", mus, aciklama, brut, 0.0, odm, taksit])
+                    
+                    # Cari dökümlerde de net olarak Asıl Poliçe No'sunu belirtir
+                    if islem_notu: 
+                        yeni_satirlar.append([islem_tarihi, "Müşteri Carisi", mus, f"{islem_notu} İADESİ - {aciklama}", brut, 0.0, odm, taksit])
+                    else: 
+                        yeni_satirlar.append([islem_tarihi, "Müşteri Carisi", mus, aciklama, brut, 0.0, odm, taksit])
                     
                     if aktif_acente != "Aktürk Sigorta (Merkez)":
-                        yeni_satirlar.append([islem_tarihi, "Tali Acente Carisi", aktif_acente, f"Acente Payı İptal/Kesintisi - {aciklama}", akturk_kazanci, 0.0, "Aktürk Sigorta Kazancı", 1])
+                        if islem_notu:
+                            yeni_satirlar.append([islem_tarihi, "Tali Acente Carisi", aktif_acente, f"Acente Payı İptal/Kesintisi - {aciklama}{baglanti_notu}", akturk_kazanci, 0.0, "Aktürk Sigorta Kazancı", 1])
+                        else:
+                            yeni_satirlar.append([islem_tarihi, "Tali Acente Carisi", aktif_acente, f"Acente Payı Hakediş - {aciklama}", akturk_kazanci, 0.0, "Aktürk Sigorta Kazancı", 1])
                     
                     doc.worksheet("Cari_Islemler").append_rows(yeni_satirlar, value_input_option='USER_ENTERED')
                     doc.worksheet("Musteriler").append_row([mus, tc, ilet, brut], value_input_option='USER_ENTERED')
                     st.cache_data.clear()
-                st.success("Harika! İşlem başarıyla kaydedildi.")
+                st.success("Harika! İşlem, ana poliçeye bağlanarak başarıyla kaydedildi.")
 
     elif menu == "💰 Cari & Finans":
         st.header("💰 Gelişmiş Finans Yönetimi")
@@ -783,20 +822,46 @@ else:
             else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
 
     elif menu == "🔎 Genel Arama":
-        st.header("🔎 Gelişmiş Arama")
+        st.header("🔎 Gelişmiş & Bağlamlı Arama")
         df_pol = get_data("Policeler")
         if not df_pol.empty:
-            ara = st.text_input("🔍 Müşteri Adı veya Plaka Yazın:")
+            ara = st.text_input("🔍 Müşteri Adı veya Plaka Yazın (Örn: 06EJA):")
             if ara:
                 ara_temiz = temiz_isim(ara)
                 mask = df_pol['Müşteri Adı Soyadı'].str.contains(ara_temiz, na=False) | df_pol['Plaka'].str.contains(ara_temiz, na=False)
-                sonuc = df_pol[mask]
+                sonuc = df_pol[mask].copy()
                 
                 if not sonuc.empty:
-                    df_ui_arama = df_gorsel_yap(sonuc, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
-                    goster_sutunlar = [c for c in df_ui_arama.columns if c != "Sheet_Row"]
-                    st.dataframe(df_ui_arama[goster_sutunlar], column_config=STIL_AYARLARI, use_container_width=True)
-                    excel_indir(sonuc, "Arama Sonuçlarını Excel İndir", f"Arama_Sonucu_{ara_temiz}")
+                    tab1, tab2 = st.tabs(["🔗 Bağlamlı Görünüm (Polisoft Tarzı)", "📋 Klasik Liste Görünümü"])
+                    
+                    with tab1:
+                        # Bağlam anahtarı: Plaka ve Ürün aynı ise (İsim hatalı yazılsa bile) bunları tek dosyada birleştir.
+                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Plaka: {x['Plaka']} | Ürün: {x['Sigorta Türü']} | Şirket: {x['Sigorta Şirketi'].split('(')[0].strip()}", axis=1)
+                        gruplar = sonuc.groupby('Baglam_Key')
+                        
+                        st.info("💡 Alt poliçeleri (Zeyl, İptal, Yenileme) görmek için klasörlerin üzerine tıklayın.")
+                        
+                        for key, grup in gruplar:
+                            # Plakası olmayan boş kayıtları klasörlemiyoruz
+                            if "Plaka:  |" not in key:
+                                net_toplam = grup["Net Prim"].apply(sayiya_cevir).sum()
+                                brut_toplam = grup["Brüt Prim"].apply(sayiya_cevir).sum()
+                                kom_toplam = grup["Şirket Komisyonu"].apply(sayiya_cevir).sum()
+                                
+                                durum = "🟢 AKTİF" if brut_toplam > 0 else ("🔴 TAMAMEN İPTAL" if len(grup) > 1 else "⚠️ DİKKAT")
+                                musteri_adi = grup.iloc[0]["Müşteri Adı Soyadı"]
+                                
+                                with st.expander(f"📁 {musteri_adi} -> {key} | Kalan Brüt: {para_format(brut_toplam)} | {durum}"):
+                                    st.markdown(f"**💰 Poliçenin Güncel Net Primi:** {para_format(net_toplam)} | **Kalan Net Komisyon:** {para_format(kom_toplam)}")
+                                    df_ui_grup = df_gorsel_yap(grup, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
+                                    goster_sutunlar = ["Tanzim Tarihi", "Sigorta Şirketi", "Müşteri Adı Soyadı", "Net Prim", "Brüt Prim", "Şirket Komisyonu", "PDF Linki"]
+                                    st.dataframe(df_ui_grup[goster_sutunlar], column_config=STIL_AYARLARI, use_container_width=True)
+                    
+                    with tab2:
+                        df_ui_arama = df_gorsel_yap(sonuc, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
+                        goster_sutunlar = [c for c in df_ui_arama.columns if c not in ["Sheet_Row", "Baglam_Key"]]
+                        st.dataframe(df_ui_arama[goster_sutunlar], column_config=STIL_AYARLARI, use_container_width=True)
+                        excel_indir(sonuc, "Arama Sonuçlarını Excel İndir", f"Arama_Sonucu_{ara_temiz}")
                 else: 
                     st.warning("Eşleşen tam kayıt bulunamadı.")
                     tum_isimler = df_pol['Müşteri Adı Soyadı'].dropna().unique().tolist()
