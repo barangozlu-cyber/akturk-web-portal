@@ -29,7 +29,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.39 - Tam Güvenlikli ve Arayüz Düzeltmeli Sürüm"
+VERSIYON = "Aktürk CRM v6.40 - Akıllı Finans ve Kusursuz Sayı Motoru"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -97,21 +97,33 @@ def temiz_isim(metin):
 def sayiya_cevir(deger):
     if pd.isna(deger) or str(deger).strip() == "": return 0.0
     if isinstance(deger, (int, float)): return float(deger)
+    
     deger_str = str(deger).strip()
     deger_str = re.sub(r'[^\d.,-]', '', deger_str) 
     deger_str = deger_str.rstrip('.,')
     if not deger_str: return 0.0
+    
     if '.' in deger_str and ',' in deger_str:
         if deger_str.rfind(',') > deger_str.rfind('.'):
             deger_str = deger_str.replace('.', '').replace(',', '.')
-        else: deger_str = deger_str.replace(',', '')
+        else:
+            deger_str = deger_str.replace(',', '')
     elif ',' in deger_str:
         parts = deger_str.split(',')
-        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3): deger_str = deger_str.replace(',', '')
-        else: deger_str = deger_str.replace(',', '.')
+        if len(parts) > 2 or (len(parts) == 2 and len(parts[-1]) == 3):
+            deger_str = deger_str.replace(',', '')
+        else:
+            deger_str = deger_str.replace(',', '.')
     elif '.' in deger_str:
         parts = deger_str.split('.')
-        if len(parts) > 2 or (len(parts) == 2 and len(parts[1]) == 3): deger_str = deger_str.replace('.', '')
+        if len(parts) >= 2:
+            # KLAVYE NUMPAD HATASI KORUMASI (Örn: 3.966.37 veya 3.966)
+            if len(parts[-1]) != 3:
+                son_nokta = deger_str.rfind('.')
+                deger_str = deger_str[:son_nokta].replace('.', '') + '.' + deger_str[son_nokta+1:]
+            else:
+                deger_str = deger_str.replace('.', '')
+                
     try: return float(deger_str)
     except: return 0.0
 
@@ -121,6 +133,14 @@ def para_format(deger):
         formatted = "{:,.2f}".format(temiz_sayi)
         return formatted.replace(",", "X").replace(".", ",").replace("X", ".") + " TL"
     except: return "0,00 TL"
+
+def editor_icin_hazirla(deger):
+    try:
+        v = sayiya_cevir(deger)
+        if v == 0: return "0"
+        if v.is_integer(): return str(int(v))
+        return f"{v:.2f}".replace('.', ',')
+    except: return "0"
 
 def df_gorsel_yap(df, para_sutunlari):
     df_gorsel = df.copy()
@@ -589,10 +609,13 @@ else:
                     m3.metric("Aktürk Sigorta Kazancı", para_format(filtrelenmis_policeler['Aktürk Sigorta Kazancı'].sum()))
                     
                     st.markdown("#### ✏️ Hızlı Poliçe Düzenleme (Prim ve Komisyon Değişimi)")
-                    st.info("💡 **Aşağıdaki tablodan hücrelere çift tıklayarak 'Net Prim', 'Brüt Prim' ve 'Şirket Komisyonu' rakamlarını anında değiştirebilirsiniz.**")
+                    st.info("💡 **Aşağıdaki tablodan hücrelere çift tıklayarak rakamları anında değiştirebilirsiniz (Örn: 1500,50 yazabilirsiniz)**")
                     
                     edit_cols = ["Tanzim Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]
                     df_to_edit = filtrelenmis_policeler[edit_cols].copy()
+                    
+                    for c in ["Net Prim", "Brüt Prim", "Şirket Komisyonu"]:
+                        df_to_edit[c] = df_to_edit[c].apply(editor_icin_hazirla)
                     
                     edited_df = st.data_editor(
                         df_to_edit, 
@@ -614,17 +637,30 @@ else:
                             for idx in df_to_edit.index:
                                 old_row = df_to_edit.loc[idx]
                                 new_row = edited_df.loc[idx]
-                                if not old_row.equals(new_row):
+                                
+                                eski_net = float(sayiya_cevir(old_row["Net Prim"]))
+                                yeni_net = float(sayiya_cevir(new_row["Net Prim"]))
+                                eski_brut = float(sayiya_cevir(old_row["Brüt Prim"]))
+                                yeni_brut = float(sayiya_cevir(new_row["Brüt Prim"]))
+                                eski_kom = float(sayiya_cevir(old_row["Şirket Komisyonu"]))
+                                yeni_kom = float(sayiya_cevir(new_row["Şirket Komisyonu"]))
+                                
+                                if eski_net != yeni_net or eski_brut != yeni_brut or eski_kom != yeni_kom:
                                     sheet_row = int(filtrelenmis_policeler.loc[idx, "Sheet_Row"])
-                                    for col in ["Net Prim", "Brüt Prim", "Şirket Komisyonu"]:
-                                        if old_row[col] != new_row[col]:
-                                            col_idx = headers.index(col) + 1
-                                            val = float(sayiya_cevir(new_row[col]))
-                                            cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=val))
+                                    
+                                    if eski_net != yeni_net:
+                                        col_idx = headers.index("Net Prim") + 1
+                                        cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=yeni_net))
+                                    if eski_brut != yeni_brut:
+                                        col_idx = headers.index("Brüt Prim") + 1
+                                        cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=yeni_brut))
+                                    if eski_kom != yeni_kom:
+                                        col_idx = headers.index("Şirket Komisyonu") + 1
+                                        cells_to_update.append(gspread.Cell(row=sheet_row, col=col_idx, value=yeni_kom))
                             
                             if cells_to_update:
                                 ws_pol.update_cells(cells_to_update, value_input_option='USER_ENTERED')
-                                st.success(f"🎉 Harika! Toplam {len(cells_to_update)} adet veri güncellendi.")
+                                st.success(f"🎉 Harika! Toplam {len(cells_to_update)} hücre güncellendi.")
                                 st.cache_data.clear(); st.rerun()
                             else: st.info("Herhangi bir değişiklik algılanmadı.")
                     
