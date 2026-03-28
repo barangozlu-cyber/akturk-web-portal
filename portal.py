@@ -29,7 +29,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "Aktürk CRM v6.41 - Kusursuz Kesir ve Virgül Motoru"
+VERSIYON = "Aktürk CRM v6.42 - Toplu Cari ve Rakam Onarım Motoru"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -113,12 +113,11 @@ def sayiya_cevir(deger):
         if deger_str.count(',') > 1:
             deger_str = deger_str.replace(',', '')
         else:
-            # Türkiye'de tek virgül HER ZAMAN ondalık ayırıcıdır (Örn: 387,498 veya 15,125)
+            # Türkiye'de tek virgül HER ZAMAN ondalık ayırıcıdır
             deger_str = deger_str.replace(',', '.')
     elif '.' in deger_str:
         parts = deger_str.split('.')
         if len(parts) >= 2:
-            # KLAVYE NUMPAD HATASI KORUMASI (Örn: 3.966.37 veya 3.966)
             if len(parts[-1]) != 3:
                 son_nokta = deger_str.rfind('.')
                 deger_str = deger_str[:son_nokta].replace('.', '') + '.' + deger_str[son_nokta+1:]
@@ -801,7 +800,7 @@ else:
 
     elif menu == "🛠️ Düzeltme & Silme":
         st.header("🛠️ Kayıt Düzeltme ve Silme Merkezi")
-        t1, t2, t3 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Poliçe Sil (Ve Carisini)", "🗑️ Serbest Cari Kaydı Sil"])
+        t1, t2, t3, t4 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar (YENİ)"])
         
         with t1:
             st.markdown("### Tüm Sistemde Müşteri Bilgilerini Güncelle")
@@ -918,6 +917,122 @@ else:
                             st.success("Cari kayıt başarıyla silindi!")
                             st.cache_data.clear(); st.rerun()
                     else: st.warning("Cari kayıt bulunamadı.")
+                    
+        with t4:
+            st.markdown("### 🚑 Toplu Rakam ve Cari Onarım Motoru")
+            st.info("Eskiden yanlışlıkla milyonluk veya yüzbinlik olarak kaydedilen poliçelerin rakamlarını buradan düzeltin. Sistem, bağlı olan Müşteri ve Acente Cari borçlarını da saniyeler içinde otomatik güncelleyecektir.")
+            df_pol = get_data("Policeler")
+            
+            if not df_pol.empty:
+                ara_hata = st.text_input("Düzeltilecek Müşterinin Adını veya Plakasını Yazın:")
+                if ara_hata:
+                    ara_hata_t = temiz_isim(ara_hata)
+                    mask_hata = df_pol['Müşteri Adı Soyadı'].str.contains(ara_hata_t, na=False) | df_pol['Plaka'].str.contains(ara_hata_t, na=False)
+                    hatali_df = df_pol[mask_hata].copy()
+                else:
+                    df_pol_sirali = df_pol.copy()
+                    df_pol_sirali["Brüt_Siralama"] = df_pol_sirali["Brüt Prim"].apply(sayiya_cevir)
+                    hatali_df = df_pol_sirali.sort_values(by="Brüt_Siralama", ascending=False).head(10).copy()
+                    st.warning("Arama yapmadığınız için şu an sistemdeki en yüksek rakamlı (muhtemelen hatalı) ilk 10 kayıt gösteriliyor.")
+                
+                if not hatali_df.empty:
+                    edit_cols = ["Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Acente", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]
+                    df_to_edit_hata = hatali_df[edit_cols].copy()
+                    
+                    for c in ["Net Prim", "Brüt Prim", "Şirket Komisyonu"]:
+                        df_to_edit_hata[c] = df_to_edit_hata[c].apply(editor_icin_hazirla)
+                        
+                    edited_hata_df = st.data_editor(
+                        df_to_edit_hata, 
+                        key="hata_motoru", 
+                        disabled=["Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Acente"],
+                        use_container_width=True
+                    )
+                    
+                    if st.button("🚀 Düzeltmeleri Kaydet ve CARİLERE YANSIT", type="primary"):
+                        with st.spinner("Poliçeler ve bağlı Müşteri/Acente Cari Hesapları onarılıyor..."):
+                            doc = client.open_by_key(SHEET_ID)
+                            ws_pol = doc.worksheet("Policeler")
+                            ws_cari = doc.worksheet("Cari_Islemler")
+                            df_cari = get_data("Cari_Islemler")
+                            
+                            headers_pol = ws_pol.row_values(1)
+                            headers_cari = ws_cari.row_values(1)
+                            
+                            df_acenteler = get_data("Ayarlar_Acenteler")
+                            acente_oranlari = dict(zip(df_acenteler['Acente_Adi'], df_acenteler['Tali_Oran'])) if not df_acenteler.empty else {}
+                            
+                            cells_to_update_pol = []
+                            cells_to_update_cari = []
+                            
+                            for idx in df_to_edit_hata.index:
+                                old_row = df_to_edit_hata.loc[idx]
+                                new_row = edited_hata_df.loc[idx]
+                                
+                                eski_net = float(sayiya_cevir(old_row["Net Prim"]))
+                                yeni_net = float(sayiya_cevir(new_row["Net Prim"]))
+                                eski_brut = float(sayiya_cevir(old_row["Brüt Prim"]))
+                                yeni_brut = float(sayiya_cevir(new_row["Brüt Prim"]))
+                                eski_kom = float(sayiya_cevir(old_row["Şirket Komisyonu"]))
+                                yeni_kom = float(sayiya_cevir(new_row["Şirket Komisyonu"]))
+                                
+                                if eski_net != yeni_net or eski_brut != yeni_brut or eski_kom != yeni_kom:
+                                    sheet_row_pol = int(hatali_df.loc[idx, "Sheet_Row"])
+                                    
+                                    # Poliçe hücrelerini güncelleme listesine ekle
+                                    if eski_net != yeni_net: cells_to_update_pol.append(gspread.Cell(row=sheet_row_pol, col=headers_pol.index("Net Prim")+1, value=yeni_net))
+                                    if eski_brut != yeni_brut: cells_to_update_pol.append(gspread.Cell(row=sheet_row_pol, col=headers_pol.index("Brüt Prim")+1, value=yeni_brut))
+                                    if eski_kom != yeni_kom: cells_to_update_pol.append(gspread.Cell(row=sheet_row_pol, col=headers_pol.index("Şirket Komisyonu")+1, value=yeni_kom))
+                                    
+                                    # Şimdi CARİ tablosunu bul ve güncelle
+                                    mus = hatali_df.loc[idx, "Müşteri Adı Soyadı"]
+                                    plk = hatali_df.loc[idx, "Plaka"]
+                                    urn = hatali_df.loc[idx, "Sigorta Türü"]
+                                    acn = hatali_df.loc[idx, "Acente"]
+                                    sir = hatali_df.loc[idx, "Sigorta Şirketi"]
+                                    
+                                    # Cari açıklama kökünü oluştur (İptaller dahil)
+                                    aciklama_koku = f"{sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)','')} - {urn} - Plaka: {plk}"
+                                    
+                                    if not df_cari.empty:
+                                        # 1. Müşteri Carisi Güncellemesi
+                                        mus_cari_rows = df_cari[(df_cari["Kisi_Kurum"] == mus) & (df_cari["Islem_Turu"] == "Müşteri Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))]
+                                        for c_idx, c_row in mus_cari_rows.iterrows():
+                                            c_sheet_row = int(c_row["Sheet_Row"])
+                                            eski_borc = float(sayiya_cevir(c_row["Borc"]))
+                                            eski_alacak = float(sayiya_cevir(c_row["Alacak"]))
+                                            # Eğer bu bir iptal/iade ise Alacak tarafı doludur, normalse Borc doludur
+                                            if eski_borc > 0:
+                                                cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Borc")+1, value=abs(yeni_brut)))
+                                            elif eski_alacak > 0:
+                                                cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Alacak")+1, value=abs(yeni_brut)))
+                                                
+                                        # 2. Tali Acente Carisi Güncellemesi
+                                        if acn != "Aktürk Sigorta (Merkez)":
+                                            t_oran = float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))
+                                            if t_oran > 1: t_oran /= 100
+                                            yeni_kazanc = yeni_kom * t_oran
+                                            
+                                            acente_cari_rows = df_cari[(df_cari["Kisi_Kurum"] == acn) & (df_cari["Islem_Turu"] == "Tali Acente Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))]
+                                            for c_idx, c_row in acente_cari_rows.iterrows():
+                                                c_sheet_row = int(c_row["Sheet_Row"])
+                                                eski_borc = float(sayiya_cevir(c_row["Borc"]))
+                                                eski_alacak = float(sayiya_cevir(c_row["Alacak"]))
+                                                if eski_borc > 0:
+                                                    cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Borc")+1, value=abs(yeni_kazanc)))
+                                                elif eski_alacak > 0:
+                                                    cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Alacak")+1, value=abs(yeni_kazanc)))
+
+                            if cells_to_update_pol:
+                                ws_pol.update_cells(cells_to_update_pol, value_input_option='USER_ENTERED')
+                            if cells_to_update_cari:
+                                ws_cari.update_cells(cells_to_update_cari, value_input_option='USER_ENTERED')
+                                
+                            if cells_to_update_pol or cells_to_update_cari:
+                                st.success(f"🎉 Mucize gerçekleşti! Poliçeler ve bunlara bağlı tüm Cari hesaplar ({len(cells_to_update_cari)} hücre) saniyeler içinde kuruşu kuruşuna onarıldı.")
+                                st.cache_data.clear(); st.rerun()
+                            else:
+                                st.info("Herhangi bir değişiklik yapmadınız.")
 
     elif menu == "⚙️ Ayarlar":
         st.header("⚙️ Sistem Ayarları")
