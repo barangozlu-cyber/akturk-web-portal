@@ -32,7 +32,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v8.0 (Kalıcı Hesap Planı & Acente Listesi Entegrasyonu)"
+VERSIYON = "v8.20 (Önceki Dönem Devir Bakiyesi Entegrasyonu)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -59,7 +59,6 @@ def ekran_temizle():
         if key not in ["giris_yapildi", "kullanici_adi", "google_kasa"]:
             del st.session_state[key]
 
-# 🛡️ GOOGLE API ÇÖKME ÖNLEYİCİ KALKAN
 def api_kalkani(fonksiyon):
     bekleme_suresi = 2
     for deneme in range(4):
@@ -181,8 +180,7 @@ def hesap_kodu_ekle(df, hesap_tipi):
     def kod_bul(isim):
         isim = str(isim).strip()
         if isim in hk_map and str(hk_map[isim]).strip(): return hk_map[isim]
-        # Eğer henüz Sheet'e yazılmamışsa geçici kod üretir
-        uniques = sorted(df[kolon].dropna().unique())
+        uniques = sorted([x for x in df[kolon].dropna().unique() if str(x).strip() != ""])
         idx = uniques.index(isim) if isim in uniques else 0
         return f"{prefix}.{str(idx+1).zfill(3)}"
         
@@ -490,7 +488,7 @@ else:
             if not df_pol_mevcut.empty:
                 st.info("💡 **Bağlantı Motoru:** Aşağıdan işlem yapacağınız asıl (ana) poliçeyi seçin. Bu sayede plaka değişse bile (örn: geçici plakadan asıl plakaya geçiş) sistem poliçeleri birbiriyle eşleştirir.")
                 df_pol_mevcut["Ozet"] = df_pol_mevcut["Plaka"] + " | " + df_pol_mevcut["Müşteri Adı Soyadı"] + " | " + df_pol_mevcut["Sigorta Türü"] + " | No: " + df_pol_mevcut["Poliçe No"]
-                liste = ["Lütfen Bağlanacak Ana Poliçeyi Seçin..."] + df_pol_mevcut["Ozet"].dropna().unique().tolist()
+                liste = ["Lütfen Bağlanacak Ana Poliçeyi Seçin..."] + [ozet for ozet in df_pol_mevcut["Ozet"].dropna().unique().tolist() if str(ozet).strip() != ""]
                 
                 secim = st.selectbox("🔗 İptal/Zeyil Edilecek Ana Poliçe:", liste)
                 if secim != "Lütfen Bağlanacak Ana Poliçeyi Seçin...":
@@ -663,7 +661,6 @@ else:
         acente_oranlari = dict(zip(df_acenteler['Acente_Adi'], df_acenteler['Tali_Oran'])) if not df_acenteler.empty else {}
 
         with t1:
-            # Dropdown Listesinin Sheet'teki Ayarlar'dan Çekilmesi
             acente_adlari = df_acenteler["Acente_Adi"].dropna().unique().tolist() if not df_acenteler.empty else []
             if "Aktürk Sigorta (Merkez)" not in acente_adlari:
                 acente_adlari.insert(0, "Aktürk Sigorta (Merkez)")
@@ -672,7 +669,7 @@ else:
             if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
                 sirketler = df_cari[df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi"]["Kisi_Kurum"].dropna().unique().tolist()
                 
-            sirket_tali_listesi = sorted(list(set(acente_adlari + sirketler)))
+            sirket_tali_listesi = sorted([x for x in list(set(acente_adlari + sirketler)) if str(x).strip() != ""])
             secilen_kurum = st.selectbox("Mutabakat Yapılacak Şirket veya Tali Acente:", ["Seçiniz..."] + sirket_tali_listesi)
             
             if secilen_kurum != "Seçiniz...":
@@ -685,7 +682,6 @@ else:
                 if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
                     is_sirket = secilen_kurum in df_cari[df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi"]["Kisi_Kurum"].values
 
-                # --- 1. KISIM: POLİÇE ÜRETİM DETAYI (NET/BRÜT GÖSTERİMİ) ---
                 st.markdown(f"#### 1️⃣ {secilen_kurum} - Poliçe Üretim Detayı")
                 if not df_pol.empty:
                     if is_sirket:
@@ -711,7 +707,6 @@ else:
                 
                 st.divider()
 
-                # --- 2. KISIM: FİNANSAL MUTABAKAT VE EKSTRE ---
                 st.markdown(f"#### 2️⃣ {secilen_kurum} - Finansal Mutabakat ve Ödemeler (Cari Ekstre)")
                 if not df_cari.empty:
                     kurum_carisi = df_cari[df_cari["Kisi_Kurum"] == secilen_kurum].copy()
@@ -726,12 +721,35 @@ else:
                         elif genel_bakiye < 0: st.success(f"✅ Sizin Kuruma Borcunuz (Fazla Ödeme): {para_format(abs(genel_bakiye))}")
                         else: st.info("Hesaplar Mutabık (0,00 TL)")
                         
-                        mask_cari = (kurum_carisi['Tarih_Obj'].dt.date >= ilk_tarih) & (kurum_carisi['Tarih_Obj'].dt.date <= son_tarih)
-                        filtrelenmis_cari = kurum_carisi[mask_cari]
+                        # DEVİR BAKİYESİ HESAPLAMA (Tarihten Önceki İşlemler)
+                        gecmis_mask = kurum_carisi['Tarih_Obj'].dt.date < ilk_tarih
+                        gecmis_df = kurum_carisi[gecmis_mask]
+                        devir_bakiye = gecmis_df["Borc"].sum() - gecmis_df["Alacak"].sum()
                         
-                        df_ui_cari = df_gorsel_yap(filtrelenmis_cari[["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], ["Borc", "Alacak"])
+                        devir_satiri = pd.DataFrame()
+                        if devir_bakiye != 0:
+                            devir_borc = devir_bakiye if devir_bakiye > 0 else 0.0
+                            devir_alacak = abs(devir_bakiye) if devir_bakiye < 0 else 0.0
+                            devir_satiri = pd.DataFrame([{
+                                "Hesap Kodu": kurum_carisi["Hesap Kodu"].iloc[0] if not kurum_carisi.empty else "",
+                                "Tarih": ilk_tarih.strftime("%d.%m.%Y"),
+                                "Islem_Detayi": "🔄 ÖNCEKİ DÖNEMDEN DEVİR",
+                                "Borc": devir_borc,
+                                "Alacak": devir_alacak,
+                                "Odeme_Tipi": "-"
+                            }])
+
+                        # Sadece seçili tarih aralığını filtrele
+                        mask_cari = (kurum_carisi['Tarih_Obj'].dt.date >= ilk_tarih) & (kurum_carisi['Tarih_Obj'].dt.date <= son_tarih)
+                        gosterilecek_cari_df = kurum_carisi[mask_cari][["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]]
+                        
+                        # Devir satırını en başa ekle
+                        if not devir_satiri.empty:
+                            gosterilecek_cari_df = pd.concat([devir_satiri, gosterilecek_cari_df], ignore_index=True)
+                        
+                        df_ui_cari = df_gorsel_yap(gosterilecek_cari_df, ["Borc", "Alacak"])
                         st.dataframe(df_ui_cari, use_container_width=True)
-                        excel_indir(filtrelenmis_cari[["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], "Cari Ekstreyi Excel İndir", f"{secilen_kurum}_Ekstre")
+                        excel_indir(gosterilecek_cari_df, "Cari Ekstreyi Excel İndir", f"{secilen_kurum}_Ekstre")
 
                 st.divider()
                 with st.form("kurum_islem", clear_on_submit=True):
@@ -760,7 +778,7 @@ else:
 
         with t2:
             if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
-                musteriler = df_cari[df_cari["Islem_Turu"] == "Müşteri Carisi"]["Kisi_Kurum"].dropna().unique().tolist()
+                musteriler = [m for m in df_cari[df_cari["Islem_Turu"] == "Müşteri Carisi"]["Kisi_Kurum"].dropna().unique().tolist() if str(m).strip() != ""]
                 secilen_musteri = st.selectbox("Müşteri Seçin:", ["Seçiniz..."] + sorted(musteriler))
                 if secilen_musteri != "Seçiniz...":
                     m_cari = df_cari[(df_cari["Kisi_Kurum"] == secilen_musteri) & (df_cari["Islem_Turu"] == "Müşteri Carisi")].copy()
@@ -779,10 +797,34 @@ else:
                     elif bakiye < 0: st.success(f"✅ Fazla Ödeme (Alacaklı): {para_format(abs(bakiye))}")
                     else: st.info("Borç Yok (0,00 TL)")
                     
+                    # MÜŞTERİ DEVİR BAKİYESİ HESAPLAMA
+                    gecmis_m_mask = m_cari['Tarih_Obj'].dt.date < m_ilk
+                    gecmis_m_df = m_cari[gecmis_m_mask]
+                    devir_m_bakiye = gecmis_m_df["Borc"].sum() - gecmis_m_df["Alacak"].sum()
+                    
+                    devir_m_satiri = pd.DataFrame()
+                    if devir_m_bakiye != 0:
+                        devir_m_borc = devir_m_bakiye if devir_m_bakiye > 0 else 0.0
+                        devir_m_alacak = abs(devir_m_bakiye) if devir_m_bakiye < 0 else 0.0
+                        devir_m_satiri = pd.DataFrame([{
+                            "Hesap Kodu": m_cari["Hesap Kodu"].iloc[0] if not m_cari.empty else "",
+                            "Tarih": m_ilk.strftime("%d.%m.%Y"),
+                            "Islem_Detayi": "🔄 ÖNCEKİ DÖNEMDEN DEVİR",
+                            "Borc": devir_m_borc,
+                            "Alacak": devir_m_alacak,
+                            "Odeme_Tipi": "-"
+                        }])
+
                     mask_m = (m_cari['Tarih_Obj'].dt.date >= m_ilk) & (m_cari['Tarih_Obj'].dt.date <= m_son)
-                    df_ui_mus = df_gorsel_yap(m_cari[mask_m][["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], ["Borc", "Alacak"])
+                    gosterilecek_m_df = m_cari[mask_m][["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]]
+                    
+                    # Devir satırını başa ekle
+                    if not devir_m_satiri.empty:
+                        gosterilecek_m_df = pd.concat([devir_m_satiri, gosterilecek_m_df], ignore_index=True)
+                    
+                    df_ui_mus = df_gorsel_yap(gosterilecek_m_df, ["Borc", "Alacak"])
                     st.dataframe(df_ui_mus, use_container_width=True)
-                    excel_indir(m_cari[mask_m][["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], "Müşteri Ekstresini İndir", f"{secilen_musteri}_Ekstre")
+                    excel_indir(gosterilecek_m_df, "Müşteri Ekstresini İndir", f"{secilen_musteri}_Ekstre")
 
                     st.divider()
                     with st.form("musteri_odeme", clear_on_submit=True):
@@ -804,7 +846,7 @@ else:
         with t3:
             sub1, sub2, sub3 = st.tabs(["📋 Müşteri Bilançoları", "📋 Şirket ve Tali Bilançoları", "📈 Gelir ve Üretim Analizi"])
             if not df_cari.empty:
-                df_ozet = df_cari.copy()
+                df_ozet = df_cari[df_cari["Kisi_Kurum"].str.strip() != ""].copy()
                 df_ozet["Borc"] = df_ozet["Borc"].apply(sayiya_cevir); df_ozet["Alacak"] = df_ozet["Alacak"].apply(sayiya_cevir)
                 grup = df_ozet.groupby(["Islem_Turu", "Kisi_Kurum"])[["Borc", "Alacak"]].sum().reset_index()
                 grup["Bakiye"] = grup["Borc"] - grup["Alacak"]
@@ -946,12 +988,13 @@ else:
 
     elif menu == "🛠️ Düzeltme & Silme":
         st.header("🛠️ Kayıt Düzeltme ve Silme Merkezi")
-        t1, t2, t3, t4 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar"])
+        t1, t2, t3, t4, t5 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar"])
         
         with t1:
             df_mus = get_data("Musteriler")
             if not df_mus.empty:
-                secilen_mus = st.selectbox("Düzeltilecek Müşteriyi Seçin:", ["Seçiniz..."] + sorted(df_mus["Musteri_Adi"].dropna().unique().tolist()))
+                mus_listesi = [m for m in df_mus["Musteri_Adi"].dropna().unique().tolist() if str(m).strip() != ""]
+                secilen_mus = st.selectbox("Düzeltilecek Müşteriyi Seçin:", ["Seçiniz..."] + sorted(mus_listesi))
                 if secilen_mus != "Seçiniz...":
                     mus_bilgi = df_mus[df_mus["Musteri_Adi"] == secilen_mus].iloc[0]
                     with st.form("mus_duzelt"):
@@ -972,7 +1015,7 @@ else:
                                     if "Telefon" in m_headers: updates.append(gspread.Cell(row=mus_satir, col=m_headers.index("Telefon")+1, value=yeni_tel))
                                     if updates: ws_mus.update_cells(updates)
                                     
-                                    if y_isim_temiz != secilen_mus:
+                                    if y_isim_temiz != secilen_mus and y_isim_temiz != "":
                                         df_pol = get_data("Policeler")
                                         ws_pol = doc.worksheet("Policeler")
                                         p_headers = ws_pol.row_values(1)
@@ -988,6 +1031,34 @@ else:
                                 if api_kalkani(_mus_guncelle): st.success("Başarılı!"); st.cache_data.clear(); st.rerun()
 
         with t2:
+            st.markdown("### 🗑️ Müşteriyi (ve Cari Geçmişini) Tamamen Sil")
+            st.warning("⚠️ DİKKAT: Bu işlem müşteriyi, müşteriye ait tüm cari/finans geçmişini ve Google Sheet'teki kayıtlarını KALICI olarak siler. (Geri alınamaz)")
+            df_mus_sil = get_data("Musteriler")
+            if not df_mus_sil.empty:
+                sil_mus_listesi = [m for m in df_mus_sil["Musteri_Adi"].dropna().unique().tolist() if str(m).strip() != ""]
+                silinecek_mus = st.selectbox("Tamamen Silinecek Müşteriyi Seçin:", ["Seçiniz..."] + sorted(sil_mus_listesi))
+                if silinecek_mus != "Seçiniz...":
+                    if st.button(f"🚨 {silinecek_mus} İsimli Müşteriyi SİL", type="primary"):
+                        with st.spinner(f"{silinecek_mus} tüm sistemden kalıcı olarak siliniyor..."):
+                            def _mus_tamamen_sil():
+                                doc = client.open_by_key(SHEET_ID)
+                                # 1. Musteriler sayfasından sil
+                                ws_mus = doc.worksheet("Musteriler")
+                                sil_mus_satirlar = sorted(df_mus_sil[df_mus_sil["Musteri_Adi"] == silinecek_mus]["Sheet_Row"].astype(int).tolist(), reverse=True)
+                                for s in sil_mus_satirlar: ws_mus.delete_rows(s)
+                                
+                                # 2. Cari Islemlerden sil
+                                df_c_sil = get_data("Cari_Islemler")
+                                if not df_c_sil.empty:
+                                    ws_cari = doc.worksheet("Cari_Islemler")
+                                    sil_cari_satirlar = sorted(df_c_sil[df_c_sil["Kisi_Kurum"] == silinecek_mus]["Sheet_Row"].astype(int).tolist(), reverse=True)
+                                    for s in sil_cari_satirlar: ws_cari.delete_rows(s)
+                                return True
+                            if api_kalkani(_mus_tamamen_sil):
+                                st.success("Müşteri ve tüm hesap hareketleri başarıyla silindi!")
+                                st.cache_data.clear(); st.rerun()
+
+        with t3:
             df_pol = get_data("Policeler")
             if not df_pol.empty:
                 ara_pol_t = temiz_isim(st.text_input("Silmek istediğiniz poliçeyi arayın (Plaka, Poliçe No, Müşteri):").upper())
@@ -1013,7 +1084,7 @@ else:
                                     return True
                                 if api_kalkani(_police_sil): st.success("Kalıcı olarak silindi!"); st.cache_data.clear(); st.rerun()
 
-        with t3:
+        with t4:
             df_cari = get_data("Cari_Islemler")
             if not df_cari.empty:
                 ara_c_t = temiz_isim(st.text_input("Silinecek Cari Kaydını Arayın (Müşteri, Tutar, Açıklama vb.):").upper())
@@ -1028,7 +1099,7 @@ else:
                                     return True
                                 if api_kalkani(_cari_sil): st.success("Silindi!"); st.cache_data.clear(); st.rerun()
 
-        with t4:
+        with t5:
             df_pol = get_data("Policeler")
             if not df_pol.empty:
                 ara_hata_t = temiz_isim(st.text_input("Düzeltilecek Müşterinin Adını veya Plakasını Yazın:"))
