@@ -958,7 +958,7 @@ else:
 
     elif menu == "🛠️ Kayıt Onarım & Silme":
         st.header("🛠️ Sistem Kayıt Yönetimi")
-        t1, t2, t3, t4, t5, t6 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar", "🔄 İsim / Kurum Birleştir"])
+        t1, t2, t3, t4, t5, t6 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "📝 Fiş No İle Sil / Düzenle", "🚑 Rakam/Cari Onar", "🔄 İsim / Kurum Birleştir"])
         
         with t1:
             df_mus = get_data("Musteriler")
@@ -1033,17 +1033,88 @@ else:
                                 if api_kalkani(_police_sil): st.success("Silindi!"); st.cache_data.clear(); st.rerun()
 
         with t4:
+            st.markdown("### 📝 Fiş Numarası ile İşlem Silme & Düzenleme")
+            st.info("💡 Hatalı girdiğiniz bir ödemeyi (THS) veya işlemi bularak silebilir veya tablodan **tutar/tarih/açıklama** gibi detaylarını Excel gibi düzenleyebilirsiniz.")
             df_cari = get_data("Cari_Islemler")
-            if not df_cari.empty:
-                ara_c_t = temiz_isim(st.text_input("Silinecek Cari Kaydını Arayın (Müşteri, Tutar, Açıklama vb.):").upper())
-                if ara_c_t:
-                    sonuc_c = df_cari[df_cari['Kisi_Kurum'].str.contains(ara_c_t, na=False) | df_cari['Islem_Detayi'].str.contains(ara_c_t, na=False) | df_cari['Borc'].astype(str).str.contains(ara_c_t, na=False) | df_cari['Alacak'].astype(str).str.contains(ara_c_t, na=False)]
-                    if not sonuc_c.empty:
-                        sil_c_sec = st.selectbox("Silinecek İşlemi Seçin:", sonuc_c.apply(lambda x: f"{x['Tarih']} | {x['Kisi_Kurum']} | {x['Islem_Detayi']} | Borç: {x['Borc']} / Alacak: {x['Alacak']} (Satır:{x['Sheet_Row']})", axis=1).tolist())
-                        if st.button("🚨 Bu Cari Kaydını SİL", type="primary"):
-                            with st.spinner("Siliniyor..."):
-                                def _cari_sil(): client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").delete_rows(int(re.search(r'\(Satır:(\d+)\)', sil_c_sec).group(1))); return True
-                                if api_kalkani(_cari_sil): st.success("Silindi!"); st.cache_data.clear(); st.rerun()
+            if not df_cari.empty and "Fiş No" in df_cari.columns:
+                gecerli_cariler = df_cari[df_cari["Fiş No"].str.strip() != ""]
+                if not gecerli_cariler.empty:
+                    fis_ozetleri = []
+                    fis_listesi = gecerli_cariler["Fiş No"].unique()
+                    for f in fis_listesi:
+                        f_df = gecerli_cariler[gecerli_cariler["Fiş No"] == f]
+                        tarih = f_df.iloc[0].get("Tarih", "")
+                        detay_tam = str(f_df.iloc[0].get("Islem_Detayi", ""))
+                        detay = (detay_tam[:45] + "...") if len(detay_tam) > 45 else detay_tam
+                        
+                        borc_toplam = f_df["Borc"].apply(sayiya_cevir).sum()
+                        alacak_toplam = f_df["Alacak"].apply(sayiya_cevir).sum()
+                        gosterim_tutar = max(borc_toplam, alacak_toplam)
+                        
+                        fis_ozetleri.append(f"{f} | {tarih} | {detay} | Hacim: {para_format(gosterim_tutar)}")
+                    
+                    sil_fis_sec = st.selectbox("İşlem Yapılacak Fişi Seçin:", ["Seçiniz..."] + sorted(fis_ozetleri, reverse=True))
+                    
+                    if sil_fis_sec != "Seçiniz...":
+                        secilen_fis_no = sil_fis_sec.split(" | ")[0]
+                        fis_df = gecerli_cariler[gecerli_cariler["Fiş No"] == secilen_fis_no].copy()
+                        
+                        islem_tipi = st.radio("Ne yapmak istiyorsunuz?", ["✏️ Fişi Düzenle", "🗑️ Fişi Tamamen Sil"], horizontal=True)
+                        st.divider()
+                        
+                        if islem_tipi == "🗑️ Fişi Tamamen Sil":
+                            st.warning(f"⚠️ Bu fiş numarasına bağlı **{len(fis_df)} adet** hesap hareketi bulundu. İşlemi onaylarsanız aşağıdaki tüm satırlar sistemden KALICI OLARAK silinecektir.")
+                            gosterilecek_tablo = df_gorsel_yap(fis_df, ["Borc", "Alacak"])[["Islem_Turu", "Kisi_Kurum", "Islem_Detayi", "Borc", "Alacak"]]
+                            st.dataframe(gosterilecek_tablo, use_container_width=True)
+                            
+                            if st.button(f"🚨 {secilen_fis_no} Numaralı Fişi SİL", type="primary"):
+                                with st.spinner("Fiş ve bağlı hareketler siliniyor..."):
+                                    def _fis_sil():
+                                        doc = client.open_by_key(SHEET_ID)
+                                        ws_cari = doc.worksheet("Cari_Islemler")
+                                        satirlar = sorted(fis_df["Sheet_Row"].astype(int).tolist(), reverse=True)
+                                        for s in satirlar: ws_cari.delete_rows(s)
+                                        return True
+                                    if api_kalkani(_fis_sil): st.success(f"✅ Fiş başarıyla silindi!"); st.cache_data.clear(); time.sleep(1); st.rerun()
+                        
+                        elif islem_tipi == "✏️ Fişi Düzenle":
+                            st.markdown("**Aşağıdaki tablonun içine tıklayarak Tarih, Açıklama, Borç ve Alacak sütunlarını değiştirebilirsiniz:**")
+                            df_to_edit = fis_df[["Tarih", "Islem_Turu", "Kisi_Kurum", "Islem_Detayi", "Borc", "Alacak"]].copy()
+                            for c in ["Borc", "Alacak"]: df_to_edit[c] = df_to_edit[c].apply(editor_icin_hazirla)
+                            
+                            edited_fis_df = st.data_editor(df_to_edit, key=f"edit_fis_{secilen_fis_no}", disabled=["Islem_Turu", "Kisi_Kurum"], use_container_width=True)
+                            
+                            if st.button("💾 Değişiklikleri Kaydet", type="primary"):
+                                with st.spinner("Güncelleniyor..."):
+                                    def _fis_guncelle():
+                                        doc = client.open_by_key(SHEET_ID)
+                                        ws_cari = doc.worksheet("Cari_Islemler")
+                                        c_headers = ws_cari.row_values(1)
+                                        cells_to_update = []
+                                        
+                                        for idx in df_to_edit.index:
+                                            old_row = df_to_edit.loc[idx]
+                                            new_row = edited_fis_df.loc[idx]
+                                            s_row = int(fis_df.loc[idx, "Sheet_Row"])
+                                            
+                                            for col in ["Tarih", "Islem_Detayi"]:
+                                                if old_row[col] != new_row[col] and col in c_headers:
+                                                    cells_to_update.append(gspread.Cell(row=s_row, col=c_headers.index(col)+1, value=new_row[col]))
+                                            
+                                            for col in ["Borc", "Alacak"]:
+                                                old_val = float(sayiya_cevir(old_row[col]))
+                                                new_val = float(sayiya_cevir(new_row[col]))
+                                                if old_val != new_val and col in c_headers:
+                                                    cells_to_update.append(gspread.Cell(row=s_row, col=c_headers.index(col)+1, value=new_val))
+                                                    
+                                        if cells_to_update:
+                                            ws_cari.update_cells(cells_to_update, value_input_option='USER_ENTERED')
+                                        return True
+                                        
+                                    if api_kalkani(_fis_guncelle):
+                                        st.success("✅ Fiş başarıyla güncellendi!"); st.cache_data.clear(); time.sleep(1); st.rerun()
+                else:
+                    st.info("Sistemde fiş numarası atanmış cari kayıt bulunmuyor.")
 
         with t5:
             df_pol = get_data("Policeler")
