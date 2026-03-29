@@ -32,7 +32,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v7.10 (API Kalkanı ve Otomatik Bekleme)"
+VERSIYON = "v7.20 (Bölünmüş Üretim/Cari Ekstresi & Hata Düzeltmesi)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -59,16 +59,16 @@ def ekran_temizle():
         if key not in ["giris_yapildi", "kullanici_adi", "google_kasa"]:
             del st.session_state[key]
 
-# 🛡️ GOOGLE API ÇÖKME ÖNLEYİCİ KALKAN (OTOMATİK TEKRAR DENEME)
+# 🛡️ GOOGLE API ÇÖKME ÖNLEYİCİ KALKAN
 def api_kalkani(fonksiyon):
     bekleme_suresi = 2
-    for deneme in range(4): # Toplam 4 deneme (0, 1, 2, 3)
+    for deneme in range(4):
         try:
             return fonksiyon()
         except Exception as e:
             if deneme < 3:
                 time.sleep(bekleme_suresi)
-                bekleme_suresi *= 2 # 2, 4, 8 saniye katlanarak bekler
+                bekleme_suresi *= 2 
             else:
                 st.error("🚨 Google Sunucuları şu an çok yoğun olduğu için yanıt vermiyor. Lütfen sayfayı yenileyip 1 dakika sonra tekrar deneyin.")
                 return None
@@ -160,14 +160,19 @@ def df_gorsel_yap(df, para_sutunlari):
     return df_gorsel
 
 def hesap_kodu_ekle(df, hesap_tipi):
-    if df.empty or "Kişi / Kurum / Acente" not in df.columns: return df
+    if df.empty: return df
+    
+    # Sütun adının farklı olma ihtimaline karşı dinamik kontrol (HATANIN ÇÖZÜMÜ BURASI)
+    kolon = "Kisi_Kurum" if "Kisi_Kurum" in df.columns else ("Kişi / Kurum / Acente" if "Kişi / Kurum / Acente" in df.columns else None)
+    if not kolon: return df
+    
     if hesap_tipi == "Müşteri": prefix = "120"
     elif hesap_tipi == "Tali": prefix = "320.T"
     else: prefix = "320.S" 
     
-    uniques = sorted(df["Kişi / Kurum / Acente"].dropna().unique())
+    uniques = sorted(df[kolon].dropna().unique())
     hk_map = {val: f"{prefix}.{str(i+1).zfill(3)}" for i, val in enumerate(uniques)}
-    df.insert(0, "Hesap Kodu", df["Kişi / Kurum / Acente"].map(hk_map))
+    df.insert(0, "Hesap Kodu", df[kolon].map(hk_map))
     return df
 
 def excel_indir(df, buton_metni, dosya_adi):
@@ -444,6 +449,8 @@ else:
         
         df_acente = get_data("Ayarlar_Acenteler")
         acente_listesi = df_acente["Acente_Adi"].tolist() if not df_acente.empty else ["Aktürk Sigorta (Merkez)"]
+        if "Aktürk Sigorta (Merkez)" not in acente_listesi:
+            acente_listesi.insert(0, "Aktürk Sigorta (Merkez)")
         dict_acente = dict(zip(df_acente['Acente_Adi'], df_acente['Tali_Oran'])) if not df_acente.empty else {}
         acente_listesi.append("➕ YENİ TALİ ACENTE EKLE")
 
@@ -517,7 +524,7 @@ else:
             kom_girdi = c12_kom.text_input("Net Komisyon (Opsiyonel)", value="", help="Boş bırakırsanız ayarlardaki oranı kullanır.")
             
             c13, c14, c15 = st.columns(3)
-            acn = c13.selectbox("İşlemi Yapan / Kesilen Ekran", acente_listesi, help="Direkt ekranınızdan (Hepiyi/Doğa) kestiyeniz 'Aktürk Merkez' seçin. Başka acenteden kestirdiyseniz onu seçin.")
+            acn = c13.selectbox("İşlemi Yapan / Kesilen Ekran", acente_listesi, help="Direkt ekranınızdan (Hepiyi/Doğa) kestiyeniz 'Aktürk Sigorta (Merkez)' seçin. Başka acenteden kestirdiyseniz onu seçin.")
             
             yeni_acente_adi = ""
             yeni_acente_orani = 0.0
@@ -652,23 +659,58 @@ else:
                     son_tarih = c_tarih2.date_input("Bitiş Tarihi", datetime.today())
                     st.divider()
 
+                    # ŞİRKET Mİ TALİ Mİ KONTROLÜ
+                    is_sirket = secilen_kurum in df_cari[df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi"]["Kisi_Kurum"].values
+                    is_tali = secilen_kurum in df_cari[df_cari["Islem_Turu"] == "Tali Acente Carisi"]["Kisi_Kurum"].values
+
+                    # --- 1. KISIM: POLİÇE ÜRETİM DETAYI (NET/BRÜT GÖSTERİMİ) ---
+                    st.markdown("#### 1️⃣ Dönem İçi Kesilen Poliçeler (Üretim Detayı)")
+                    if not df_pol.empty:
+                        if is_sirket:
+                            kurum_policeleri = df_pol[df_pol["Sigorta Şirketi"].str.replace(r' \(İPTAL-.*?\)', '', regex=True).str.strip() == secilen_kurum].copy()
+                        else:
+                            kurum_policeleri = df_pol[df_pol["Acente"] == secilen_kurum].copy()
+                        
+                        if not kurum_policeleri.empty:
+                            kurum_policeleri['Tarih_Obj'] = pd.to_datetime(kurum_policeleri['Tanzim Tarihi'], dayfirst=True, errors='coerce')
+                            mask_pol = (kurum_policeleri['Tarih_Obj'].dt.date >= ilk_tarih) & (kurum_policeleri['Tarih_Obj'].dt.date <= son_tarih)
+                            filtrelenmis_pol = kurum_policeleri[mask_pol]
+                            
+                            if not filtrelenmis_pol.empty:
+                                top_brut = filtrelenmis_pol["Brüt Prim"].apply(sayiya_cevir).sum()
+                                top_net = filtrelenmis_pol["Net Prim"].apply(sayiya_cevir).sum()
+                                st.info(f"💡 Seçilen tarihler arasında **{len(filtrelenmis_pol)} adet** poliçe kesildi. Toplam Brüt Üretim: **{para_format(top_brut)}** | Toplam Net Üretim: **{para_format(top_net)}**")
+                                
+                                goster_pol = df_gorsel_yap(filtrelenmis_pol[["Tanzim Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Şirketi", "Sigorta Türü", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]], ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
+                                st.dataframe(goster_pol, use_container_width=True)
+                                excel_indir(filtrelenmis_pol, "Poliçe Üretimlerini Excel İndir", f"{secilen_kurum}_Uretim_Listesi")
+                            else:
+                                st.warning("Bu tarih aralığında poliçe kesilmemiş.")
+                        else:
+                            st.warning("Bu kuruma ait poliçe kaydı bulunamadı.")
+                    
+                    st.divider()
+
+                    # --- 2. KISIM: FİNANSAL MUTABAKAT VE EKSTRE (KOMİSYON ÜZERİNDEN) ---
+                    st.markdown("#### 2️⃣ Finansal Mutabakat ve Ödemeler (Cari Ekstre)")
                     kurum_carisi = df_cari[df_cari["Kisi_Kurum"] == secilen_kurum].copy()
                     if not kurum_carisi.empty:
+                        kurum_carisi = hesap_kodu_ekle(kurum_carisi, "Şirket" if is_sirket else "Tali")
                         kurum_carisi["Borc"] = kurum_carisi["Borc"].apply(sayiya_cevir)
                         kurum_carisi["Alacak"] = kurum_carisi["Alacak"].apply(sayiya_cevir)
                         kurum_carisi['Tarih_Obj'] = pd.to_datetime(kurum_carisi['Tarih'], dayfirst=True, errors='coerce')
                         
                         genel_bakiye = kurum_carisi["Borc"].sum() - kurum_carisi["Alacak"].sum()
-                        if genel_bakiye > 0: st.error(f"🚨 Kurumun Bize Borcu (Bizim Alacağımız): {para_format(genel_bakiye)}")
+                        if genel_bakiye > 0: st.error(f"🚨 Kurumun Bize Borcu (Bizim Alacağımız Komisyon): {para_format(genel_bakiye)}")
                         elif genel_bakiye < 0: st.success(f"✅ Sizin Kuruma Borcunuz (Fazla Ödeme): {para_format(abs(genel_bakiye))}")
                         else: st.info("Hesaplar Mutabık (0,00 TL)")
                         
                         mask_cari = (kurum_carisi['Tarih_Obj'].dt.date >= ilk_tarih) & (kurum_carisi['Tarih_Obj'].dt.date <= son_tarih)
                         filtrelenmis_cari = kurum_carisi[mask_cari]
                         
-                        df_ui_cari = df_gorsel_yap(filtrelenmis_cari[["Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], ["Borc", "Alacak"])
+                        df_ui_cari = df_gorsel_yap(filtrelenmis_cari[["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], ["Borc", "Alacak"])
                         st.dataframe(df_ui_cari, use_container_width=True)
-                        excel_indir(filtrelenmis_cari[["Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], "Cari Ekstreyi Excel İndir", f"{secilen_kurum}_Ekstre")
+                        excel_indir(filtrelenmis_cari[["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], "Cari Ekstreyi Excel İndir", f"{secilen_kurum}_Ekstre")
 
                     st.divider()
                     with st.form("kurum_islem", clear_on_submit=True):
