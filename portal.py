@@ -21,7 +21,7 @@ import random
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.40", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.50", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
@@ -134,7 +134,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.40 (Akıllı Fiş & Evrak Numarası Sistemi)"
+VERSIYON = "v9.50 (Tam Kapsamlı Otomatik Büyük Harf Motoru)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -323,7 +323,6 @@ def get_kok_police(pno):
     return str(pno).strip()
 
 def fis_no_uret(islem_tipi="POL"):
-    # Benzersiz bir Fiş Numarası üretir (Örn: POL-2403291435)
     zaman_kodu = datetime.now().strftime('%y%m%d%H%M')
     rastgele = random.randint(10, 99)
     return f"{islem_tipi}-{zaman_kodu}{rastgele}"
@@ -350,7 +349,8 @@ def get_data(sheet_name):
     df = pd.DataFrame(rows, columns=headers)
     if not df.empty:
         df['Sheet_Row'] = df.index + 2 
-        for col in ["Müşteri Adı Soyadı", "Kisi_Kurum", "Musteri_Adi", "Sirket_Adi"]:
+        # FIX: Tüm kritik isim/kurum sütunlarını kapsayacak şekilde genişletildi.
+        for col in ["Müşteri Adı Soyadı", "Kisi_Kurum", "Musteri_Adi", "Sirket_Adi", "Sigorta Şirketi", "Acente", "Acente_Adi"]:
             if col in df.columns: df[col] = df[col].apply(temiz_isim)
     return df
 
@@ -492,9 +492,9 @@ else:
         dict_urun = dict(zip(df_urun['Urun_Adi'], df_urun['Komisyon_Orani'])) if not df_urun.empty else {}
         
         df_acente = get_data("Ayarlar_Acenteler")
-        acente_listesi = df_acente["Acente_Adi"].tolist() if not df_acente.empty else ["Aktürk Sigorta (Merkez)"]
-        if "Aktürk Sigorta (Merkez)" not in acente_listesi:
-            acente_listesi.insert(0, "Aktürk Sigorta (Merkez)")
+        acente_listesi = df_acente["Acente_Adi"].tolist() if not df_acente.empty else ["AKTÜRK SİGORTA (MERKEZ)"]
+        if "AKTÜRK SİGORTA (MERKEZ)" not in acente_listesi:
+            acente_listesi.insert(0, "AKTÜRK SİGORTA (MERKEZ)")
         dict_acente = dict(zip(df_acente['Acente_Adi'], df_acente['Tali_Oran'])) if not df_acente.empty else {}
         acente_listesi.append("➕ YENİ TALİ ACENTE EKLE")
 
@@ -548,7 +548,7 @@ else:
             def_sir = str(ana_pol_data.get("Sigorta Şirketi", p_data["sirket"])).replace(" (İPTAL-SATIŞ)", "").replace(" (İPTAL-ZEYL)", "") if ana_pol_data else p_data["sirket"]
             def_plk = ana_pol_data.get("Plaka", p_data["plaka"]) if ana_pol_data else p_data["plaka"]
             
-            sir = c7.text_input("Sigorta Şirketi (Doğa, Hepiyi, Allianz vb.)", def_sir)
+            sir_girdi = c7.text_input("Sigorta Şirketi (Doğa, Hepiyi, Allianz vb.)", def_sir)
             pno = c8.text_input("Poliçe No (Bu zeylin/işlemin numarası)", p_data["p_no"])
             plk = c9.text_input("Plaka", def_plk)
             
@@ -589,11 +589,14 @@ else:
                 with st.spinner("Sisteme İşleniyor..."):
                     def _kaydet_operasyonu():
                         doc = client.open_by_key(SHEET_ID)
-                        aktif_acente = acn
+                        
+                        # FIX: Artık formdan gelen veriler Cariye veya Poliçe tablosuna
+                        # atılmadan önce GÜVENLİK DUVARINDAN geçip BÜYÜK HARF oluyor.
                         mus = temiz_isim(mus_girdi)
+                        sir = temiz_isim(sir_girdi)
+                        aktif_acente = temiz_isim(acn) if acn != "➕ YENİ TALİ ACENTE EKLE" else "➕ YENİ TALİ ACENTE EKLE"
                         plk_temiz = str(plk).replace(" ", "").upper()
                         
-                        # FİŞ NUMARASI OLUŞTURMA
                         yeni_fis_no = fis_no_uret("POL")
                         
                         net = float(sayiya_cevir(net_girdi))
@@ -627,9 +630,9 @@ else:
                         else:
                             sirket_komisyonu = net * u_oran
                         
-                        if acn == "➕ YENİ TALİ ACENTE EKLE" and yeni_acente_adi != "":
-                            aktif_acente = yeni_acente_adi
-                            doc.worksheet("Ayarlar_Acenteler").append_row([yeni_acente_adi, yeni_acente_orani], value_input_option='USER_ENTERED')
+                        if aktif_acente == "➕ YENİ TALİ ACENTE EKLE" and yeni_acente_adi != "":
+                            aktif_acente = temiz_isim(yeni_acente_adi)
+                            doc.worksheet("Ayarlar_Acenteler").append_row([aktif_acente, yeni_acente_orani], value_input_option='USER_ENTERED')
                             t_oran = yeni_acente_orani
                         else:
                             t_oran = float(sayiya_cevir(dict_acente.get(aktif_acente, 0.0)))
@@ -659,14 +662,12 @@ else:
                         aciklama = f"{sir_iptal.replace(' (İPTAL-SATIŞ)', '').replace(' (İPTAL-ZEYL)', '')} - {urn} - Plaka: {plk_temiz}"
                         yeni_satirlar = []
                         
-                        # CARİ İŞLEMLER İÇİN FİŞ NO KONTROLÜ
                         ws_cari = doc.worksheet("Cari_Islemler")
                         c_headers = ws_cari.row_values(1)
                         if "Fiş No" not in c_headers:
                             ws_cari.update_cell(1, len(c_headers)+1, "Fiş No")
                             c_headers.append("Fiş No")
                             
-                        # Fiş no içeren hazır satır formatlayıcı
                         def cari_satir_hazirla(tarih, tur, kurum, detay, borc, alacak, odeme, taksit, fis):
                             satir = [""] * len(c_headers)
                             mapping = {"Tarih": tarih, "Islem_Turu": tur, "Kisi_Kurum": kurum, "Islem_Detayi": detay, "Borc": borc, "Alacak": alacak, "Odeme_Tipi": odeme, "Taksit": taksit, "Fiş No": fis}
@@ -682,7 +683,7 @@ else:
                         if alinan_odeme > 0:
                             yeni_satirlar.append(cari_satir_hazirla(islem_tarihi, "Müşteri Carisi", mus, f"Anında Tahsilat - {aciklama}", 0.0, alinan_odeme, odm, 1, yeni_fis_no))
                         
-                        if aktif_acente == "Aktürk Sigorta (Merkez)":
+                        if aktif_acente == "AKTÜRK SİGORTA (MERKEZ)":
                             sirket_adi_temiz = sir_iptal.replace(' (İPTAL-SATIŞ)', '').replace(' (İPTAL-ZEYL)', '').strip()
                             if islem_notu:
                                 yeni_satirlar.append(cari_satir_hazirla(islem_tarihi, "Sigorta Şirketi Carisi", sirket_adi_temiz, f"Şirket Komisyonu İptal/Kesintisi - {aciklama}{baglanti_notu}", sirket_komisyonu, 0.0, "Belge Bekleniyor", 1, yeni_fis_no))
@@ -1073,8 +1074,8 @@ else:
                                 if kom == 0:
                                     u_or = float(sayiya_cevir(urun_oranlari.get(row.get("Sigorta Türü", ""), 0.0)))
                                     kom = row["Net Prim"] * (u_or / 100 if u_or > 1 else u_or)
-                                acn = row.get("Acente", "Aktürk Sigorta (Merkez)")
-                                if acn == "Aktürk Sigorta (Merkez)": return kom
+                                acn = row.get("Acente", "AKTÜRK SİGORTA (MERKEZ)")
+                                if acn == "AKTÜRK SİGORTA (MERKEZ)": return kom
                                 else:
                                     t_or = float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))
                                     return kom * (t_or / 100 if t_or > 1 else t_or)
@@ -1326,7 +1327,7 @@ else:
                                                 if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Borc")+1, value=abs(yeni_brut)))
                                                 elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Alacak")+1, value=abs(yeni_brut)))
                                                     
-                                            if acn != "Aktürk Sigorta (Merkez)":
+                                            if acn != "AKTÜRK SİGORTA (MERKEZ)":
                                                 yeni_kazanc = yeni_kom * (float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) / 100 if float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) > 1 else float(sayiya_cevir(acente_oranlari.get(acn, 0.0))))
                                                 for c_idx, c_row in df_cari[(df_cari["Kisi_Kurum"] == acn) & (df_cari["Islem_Turu"] == "Tali Acente Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))].iterrows():
                                                     eski_borc, eski_alacak = float(sayiya_cevir(c_row["Borc"])), float(sayiya_cevir(c_row["Alacak"]))
@@ -1365,11 +1366,11 @@ else:
             
             if st.button("🚀 Tüm Sistemde Değiştir ve Hesapları Birleştir", type="primary"):
                 if eski_secim != "Seçiniz..." and yeni_secim.strip() != "":
-                    with st.spinner(f"Lütfen bekleyin... '{eski_secim}' ismi '{yeni_secim.upper()}' olarak tüm sistemde güncelleniyor..."):
+                    with st.spinner(f"Lütfen bekleyin... '{eski_secim}' ismi '{temiz_isim(yeni_secim)}' olarak tüm sistemde güncelleniyor..."):
                         def _toplu_degistir():
                             doc = client.open_by_key(SHEET_ID)
                             yeni_isim_temiz = temiz_isim(yeni_secim)
-                            eski_isim_temiz = eski_secim
+                            eski_isim_temiz = eski_secim 
                             
                             if not df_cari_t6.empty:
                                 ws_cari = doc.worksheet("Cari_Islemler")
@@ -1439,7 +1440,9 @@ else:
                         ws_acente.clear()
                         e_acente = edited_acente.fillna("")
                         data_to_save = [e_acente.columns.values.tolist()]
-                        for r in e_acente.values.tolist(): data_to_save.append([float(sayiya_cevir(v)) if isinstance(v, (int, float, str)) and sayiya_cevir(v) != 0 and str(v).replace('.','',1).isdigit() else v for v in r])
+                        for r in e_acente.values.tolist(): 
+                            r[0] = temiz_isim(r[0]) # Acente ismini de büyük harf yap
+                            data_to_save.append([float(sayiya_cevir(v)) if isinstance(v, (int, float, str)) and sayiya_cevir(v) != 0 and str(v).replace('.','',1).isdigit() else v for v in r])
                         ws_acente.append_rows(data_to_save, value_input_option='USER_ENTERED')
                         return True
                     if api_kalkani(_acente_kaydet): st.cache_data.clear(); st.rerun()
@@ -1454,7 +1457,10 @@ else:
                         ws_sirket = client.open_by_key(SHEET_ID).worksheet("Ayarlar_Sirketler")
                         ws_sirket.clear()
                         e_sirket = edited_sirket.fillna("")
-                        data_to_save = [e_sirket.columns.values.tolist()] + e_sirket.values.tolist()
+                        data_to_save = [e_sirket.columns.values.tolist()]
+                        for r in e_sirket.values.tolist():
+                            r[0] = temiz_isim(r[0]) # Şirket ismini de büyük harf yap
+                            data_to_save.append(r)
                         ws_sirket.append_rows(data_to_save, value_input_option='USER_ENTERED')
                         return True
                     if api_kalkani(_sirket_kaydet): st.cache_data.clear(); st.rerun()
@@ -1498,7 +1504,7 @@ else:
                             
                             y_fis = fis_no_uret("SNK")
                             tc, ilet, urn = str(row.get("TC / VKN", "")), str(row.get("Telefon / E-mail", "")), str(row.get("Sigorta Türü", ""))
-                            net, brut, kom, acn = float(sayiya_cevir(row.get("Net Prim", 0))), float(sayiya_cevir(row.get("Brüt Prim", 0))), float(sayiya_cevir(row.get("Şirket Komisyonu", 0))), str(row.get("Acente", "Aktürk Sigorta (Merkez)"))
+                            net, brut, kom, acn = float(sayiya_cevir(row.get("Net Prim", 0))), float(sayiya_cevir(row.get("Brüt Prim", 0))), float(sayiya_cevir(row.get("Şirket Komisyonu", 0))), temiz_isim(str(row.get("Acente", "AKTÜRK SİGORTA (MERKEZ)")))
                             islem_tarihi = tarih_formatla(row.get("Tanzim Tarihi", ""))
                             islem_notu = "SATIŞ/TAM İPTAL İADESİ - " if "İPTAL-SATIŞ" in sir else ("KISMİ İPTAL/ZEYL İADESİ - " if "İPTAL-ZEYL" in sir else ("İPTAL/İADE - " if net < 0 or brut < 0 else ""))
                             aciklama = f"{islem_notu}{sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)','')} - {urn} - Plaka: {plk}"
@@ -1508,7 +1514,7 @@ else:
                                 akturk_kazanci = float(sirket_komisyonu * (float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) / 100 if float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) > 1 else float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))))
 
                                 yeni_satirlar_cari.append(c_satir_hazirla(islem_tarihi, "Müşteri Carisi", mus, aciklama, brut, 0.0, "Aktarılmış Kayıt", 1, y_fis))
-                                if acn != "Aktürk Sigorta (Merkez)": 
+                                if acn != "AKTÜRK SİGORTA (MERKEZ)": 
                                     yeni_satirlar_cari.append(c_satir_hazirla(islem_tarihi, "Tali Acente Carisi", acn, f"Acente Payı Kesintisi - {aciklama}", akturk_kazanci, 0.0, "Aktürk Sigorta Kazancı", 1, y_fis))
                                 else: 
                                     yeni_satirlar_cari.append(c_satir_hazirla(islem_tarihi, "Sigorta Şirketi Carisi", sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)',''), f"Şirket Komisyonu Hakediş - {aciklama}", sirket_komisyonu, 0.0, "Aktarılmış Kayıt", 1, y_fis))
