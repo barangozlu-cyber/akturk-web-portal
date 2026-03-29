@@ -20,7 +20,7 @@ import time
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.20", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.30", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
@@ -35,14 +35,14 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 .stApp { background-color: #F0F2F5 !important; color: #1E293B !important; }
 h1, h2, h3, h4 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.5px; }
 
-/* 🖱️ YAZI İMLECİ (CURSOR) VE GİRİŞ KUTULARI (FIX 1) */
+/* 🖱️ YAZI İMLECİ (CURSOR) VE GİRİŞ KUTULARI */
 input, textarea, .stTextInput input, .stTextArea textarea, .stNumberInput input { 
-    caret-color: #2563EB !important; /* Parlak Mavi İmleç */
+    caret-color: #2563EB !important; 
     color: #0F172A !important; 
     font-weight: 600 !important;
 }
 
-/* 👁️ OKUNABİLİRLİK VE KONTRAST (FIX 3) */
+/* 👁️ OKUNABİLİRLİK VE KONTRAST */
 label, div[data-testid="stWidgetLabel"] > div > p { 
     color: #0F172A !important; 
     font-weight: 700 !important; 
@@ -133,7 +133,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.20 (Toplu İsim/Kurum Birleştirme Motoru)"
+VERSIYON = "v9.30 (Akıllı Arama ve Senk. Hata Düzeltmeleri)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -1064,19 +1064,34 @@ else:
                 ara_temiz = temiz_isim(ara)
                 mask = df_pol['Müşteri Adı Soyadı'].str.contains(ara_temiz, na=False) | df_pol['Plaka'].str.contains(ara_temiz, na=False) | df_pol['Poliçe No'].str.contains(ara_temiz, na=False)
                 ilk_sonuc = df_pol[mask].copy()
+                
                 if not ilk_sonuc.empty:
+                    # FIX 2: BOŞ POLİÇE NUMARALARININ BİRBİRİNE KARIŞMASINI ENGELLEYEN YAPI
                     df_pol['Kök_Poliçe'] = df_pol['Poliçe No'].apply(get_kok_police)
-                    sonuc = df_pol[df_pol['Kök_Poliçe'].isin(df_pol.loc[mask, 'Kök_Poliçe'].dropna().unique().tolist())].copy()
+                    
+                    # Sadece gerçekten dolu olan ve aramayla eşleşen poliçe numaralarını kök olarak kabul et
+                    eslesen_kokler = [k for k in df_pol.loc[mask, 'Kök_Poliçe'].dropna().unique().tolist() if str(k).strip() != ""]
+                    
+                    if eslesen_kokler:
+                        mask_final = df_pol['Kök_Poliçe'].isin(eslesen_kokler) | mask
+                        sonuc = df_pol[mask_final].copy()
+                    else:
+                        # Eğer aranan kişinin hiç poliçe numarası girilmemişse, bağlam kurmaya çalışma, sadece bulduğunu getir
+                        sonuc = ilk_sonuc.copy()
                     
                     tab1, tab2 = st.tabs(["🔗 Bağlamlı Görünüm", "📋 Klasik Liste Görünümü"])
                     with tab1:
-                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Kök Poliçe No: {x['Kök_Poliçe']} | Ürün: {str(x['Sigorta Türü']).strip()}", axis=1)
+                        # Kök poliçesi boş olanları kendi içinde değil, satır bazında göstermek için benzersiz key atıyoruz
+                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Kök Poliçe No: {x['Kök_Poliçe']} | Ürün: {str(x['Sigorta Türü']).strip()}" if str(x['Kök_Poliçe']).strip() != "" else f"Tekil Kayıt (No Yok) | {str(x['Sigorta Türü']).strip()}_{x.name}", axis=1)
+                        
                         for key, grup in sonuc.groupby('Baglam_Key'):
                             net_toplam = grup["Net Prim"].apply(sayiya_cevir).sum()
                             brut_toplam = grup["Brüt Prim"].apply(sayiya_cevir).sum()
                             kom_toplam = grup["Şirket Komisyonu"].apply(sayiya_cevir).sum()
                             durum = "🟢 AKTİF" if brut_toplam > 0 else ("🔴 TAMAMEN İPTAL" if len(grup) > 1 else "⚠️ DİKKAT")
-                            with st.expander(f"📁 {grup.iloc[0]['Müşteri Adı Soyadı']} -> {key} | Kalan Brüt: {para_format(brut_toplam)} | {durum}"):
+                            
+                            gosterim_key = key.split('_')[0] if "Tekil Kayıt" in key else key
+                            with st.expander(f"📁 {grup.iloc[0]['Müşteri Adı Soyadı']} -> {gosterim_key} | Kalan Brüt: {para_format(brut_toplam)} | {durum}"):
                                 st.markdown(f"**💰 Poliçenin Güncel Net Primi:** {para_format(net_toplam)} | **Kalan Net Komisyon:** {para_format(kom_toplam)}")
                                 st.dataframe(df_gorsel_yap(grup, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])[["Tanzim Tarihi", "Sigorta Şirketi", "Plaka", "Net Prim", "Brüt Prim", "Şirket Komisyonu", "PDF Linki"]], column_config=STIL_AYARLARI, use_container_width=True)
                     with tab2:
@@ -1092,7 +1107,6 @@ else:
     elif menu == "🛠️ Kayıt Onarım & Silme":
         st.header("🛠️ Sistem Kayıt Yönetimi")
         
-        # FIX: YENİ "🔄 İSİM / KURUM BİRLEŞTİR" SEKMESİ EKLENDİ (6. SEKME)
         t1, t2, t3, t4, t5, t6 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar", "🔄 İsim / Kurum Birleştir"])
         
         with t1:
@@ -1288,7 +1302,6 @@ else:
                             yeni_isim_temiz = temiz_isim(yeni_secim)
                             eski_isim_temiz = eski_secim
                             
-                            # 1. Cari Islemler Guncelleme
                             if not df_cari_t6.empty:
                                 ws_cari = doc.worksheet("Cari_Islemler")
                                 c_headers = ws_cari.row_values(1)
@@ -1299,7 +1312,6 @@ else:
                                         c_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=c_col_idx, value=yeni_isim_temiz))
                                     if c_updates: ws_cari.update_cells(c_updates)
                             
-                            # 2. Policeler Guncelleme
                             if not df_pol_t6.empty:
                                 ws_pol = doc.worksheet("Policeler")
                                 p_headers = ws_pol.row_values(1)
@@ -1314,7 +1326,6 @@ else:
                                     s_col_idx = p_headers.index("Sigorta Şirketi") + 1
                                     for idx, row in df_pol_t6.iterrows():
                                         sir_val = str(row["Sigorta Şirketi"])
-                                        # İptal etiketlerini bozmadan sadece şirket adını değiştir
                                         if sir_val.replace(" (İPTAL-SATIŞ)", "").replace(" (İPTAL-ZEYL)", "").strip() == eski_isim_temiz:
                                             yeni_sir_val = sir_val.replace(eski_isim_temiz, yeni_isim_temiz)
                                             p_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=s_col_idx, value=yeni_sir_val))
@@ -1395,7 +1406,15 @@ else:
 
                         yeni_satirlar_cari = []; yeni_satirlar_mus = []
                         for index, row in df_pol.iterrows():
-                            mus, tc, ilet, sir, urn, plk = temiz_isim(str(row.get("Müşteri Adı Soyadı", ""))), str(row.get("TC / VKN", "")), str(row.get("Telefon / E-mail", "")), str(row.get("Sigorta Şirketi", "")), str(row.get("Sigorta Türü", "")), str(row.get("Plaka", ""))
+                            # FIX 1: Veritabanındaki boş/hayalet satırları engelleme
+                            mus = temiz_isim(str(row.get("Müşteri Adı Soyadı", "")))
+                            sir = temiz_isim(str(row.get("Sigorta Şirketi", "")))
+                            plk = str(row.get("Plaka", ""))
+                            
+                            if mus == "" and sir == "" and plk == "": 
+                                continue # Tamamen boş veya eksik satırları atla
+                            
+                            tc, ilet, urn = str(row.get("TC / VKN", "")), str(row.get("Telefon / E-mail", "")), str(row.get("Sigorta Türü", ""))
                             net, brut, kom, acn = float(sayiya_cevir(row.get("Net Prim", 0))), float(sayiya_cevir(row.get("Brüt Prim", 0))), float(sayiya_cevir(row.get("Şirket Komisyonu", 0))), str(row.get("Acente", "Aktürk Sigorta (Merkez)"))
                             islem_tarihi = tarih_formatla(row.get("Tanzim Tarihi", ""))
                             islem_notu = "SATIŞ/TAM İPTAL İADESİ - " if "İPTAL-SATIŞ" in sir else ("KISMİ İPTAL/ZEYL İADESİ - " if "İPTAL-ZEYL" in sir else ("İPTAL/İADE - " if net < 0 or brut < 0 else ""))
