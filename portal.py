@@ -20,7 +20,7 @@ import time
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.10", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.20", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
@@ -61,7 +61,7 @@ p { color: #334155 !important; }
 /* 📑 TAB SİSTEMİ (SEKMELER) OKUNABİLİRLİK */
 .stTabs [data-baseweb="tab-list"] { background-color: transparent; border-bottom: 2px solid #E2E8F0; gap: 20px; }
 .stTabs [data-baseweb="tab"] { background-color: transparent !important; border: none !important; padding: 10px 4px !important; }
-.stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 700 !important; font-size: 15px !important; }
+.stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 700 !important; font-size: 14px !important; }
 .stTabs [aria-selected="true"] p { color: #1D4ED8 !important; font-weight: 800 !important; }
 .stTabs [aria-selected="true"] { border-bottom: 3px solid #2563EB !important; }
 
@@ -133,7 +133,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.10 (Okunabilirlik ve 4 Sekmeli Bölünmüş Yapı)"
+VERSIYON = "v9.20 (Toplu İsim/Kurum Birleştirme Motoru)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -680,7 +680,6 @@ else:
     elif menu == "💰 Cari & Mutabakat":
         st.header("💰 Finans ve Mutabakat Yönetimi")
         
-        # FIX 2: Tali ve Şirket Hesaplarını Ayırarak 4 Sekmeli Yapıya Geçiş
         t1, t2, t3, t4 = st.tabs(["🏢 Tali Acente Hesapları", "🏛️ Sigorta Şirketi Hesapları", "👤 Müşteri Hesapları", "📊 Toplu Bilançolar"])
         
         df_pol = get_data("Policeler"); df_cari = get_data("Cari_Islemler")
@@ -1092,7 +1091,9 @@ else:
 
     elif menu == "🛠️ Kayıt Onarım & Silme":
         st.header("🛠️ Sistem Kayıt Yönetimi")
-        t1, t2, t3, t4, t5 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar"])
+        
+        # FIX: YENİ "🔄 İSİM / KURUM BİRLEŞTİR" SEKMESİ EKLENDİ (6. SEKME)
+        t1, t2, t3, t4, t5, t6 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar", "🔄 İsim / Kurum Birleştir"])
         
         with t1:
             df_mus = get_data("Musteriler")
@@ -1258,6 +1259,74 @@ else:
                                 if cells_to_update_cari: ws_cari.update_cells(cells_to_update_cari, value_input_option='USER_ENTERED')
                                 return bool(cells_to_update_pol or cells_to_update_cari)
                             if api_kalkani(_hata_onar): st.success("Onarıldı!"); st.cache_data.clear(); st.rerun()
+
+        with t6:
+            st.markdown("### 🔄 Toplu İsim Değiştirme ve Cari Birleştirme")
+            st.info("💡 **Ne İşe Yarar?** Listelerde 'DOĞA' ve 'DOĞA SİGORTA' gibi aynı firmanın iki farklı isimle çıkmasını engeller. Eski ismi seçip yeni isme dönüştürdüğünüzde tüm geçmiş kayıtlar (poliçeler ve cariler) güncellenir ve hesaplar tek isimde birleşir.")
+            
+            df_pol_t6 = get_data("Policeler")
+            df_cari_t6 = get_data("Cari_Islemler")
+            
+            eski_isimler = set()
+            if not df_pol_t6.empty:
+                eski_isimler.update(df_pol_t6["Sigorta Şirketi"].str.replace(r' \(İPTAL-.*?\)', '', regex=True).str.strip().dropna().tolist())
+                eski_isimler.update(df_pol_t6["Acente"].dropna().tolist())
+            if not df_cari_t6.empty:
+                eski_isimler.update(df_cari_t6["Kisi_Kurum"].dropna().tolist())
+            
+            eski_isimler = sorted([x for x in eski_isimler if str(x).strip() != ""])
+            
+            c_m1, c_m2 = st.columns(2)
+            eski_secim = c_m1.selectbox("❌ Eski / Hatalı İsim (Silinecek):", ["Seçiniz..."] + eski_isimler)
+            yeni_secim = c_m2.text_input("✅ Yeni / Doğru İsim (Birleşecek):", value="", help="Doğa Sigorta, Hepiyi Sigorta vb.")
+            
+            if st.button("🚀 Tüm Sistemde Değiştir ve Hesapları Birleştir", type="primary"):
+                if eski_secim != "Seçiniz..." and yeni_secim.strip() != "":
+                    with st.spinner(f"Lütfen bekleyin... '{eski_secim}' ismi '{yeni_secim.upper()}' olarak tüm sistemde güncelleniyor..."):
+                        def _toplu_degistir():
+                            doc = client.open_by_key(SHEET_ID)
+                            yeni_isim_temiz = temiz_isim(yeni_secim)
+                            eski_isim_temiz = eski_secim
+                            
+                            # 1. Cari Islemler Guncelleme
+                            if not df_cari_t6.empty:
+                                ws_cari = doc.worksheet("Cari_Islemler")
+                                c_headers = ws_cari.row_values(1)
+                                if "Kisi_Kurum" in c_headers:
+                                    c_col_idx = c_headers.index("Kisi_Kurum") + 1
+                                    c_updates = []
+                                    for idx, row in df_cari_t6[df_cari_t6["Kisi_Kurum"] == eski_isim_temiz].iterrows():
+                                        c_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=c_col_idx, value=yeni_isim_temiz))
+                                    if c_updates: ws_cari.update_cells(c_updates)
+                            
+                            # 2. Policeler Guncelleme
+                            if not df_pol_t6.empty:
+                                ws_pol = doc.worksheet("Policeler")
+                                p_headers = ws_pol.row_values(1)
+                                p_updates = []
+                                
+                                if "Acente" in p_headers:
+                                    a_col_idx = p_headers.index("Acente") + 1
+                                    for idx, row in df_pol_t6[df_pol_t6["Acente"] == eski_isim_temiz].iterrows():
+                                        p_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=a_col_idx, value=yeni_isim_temiz))
+                                
+                                if "Sigorta Şirketi" in p_headers:
+                                    s_col_idx = p_headers.index("Sigorta Şirketi") + 1
+                                    for idx, row in df_pol_t6.iterrows():
+                                        sir_val = str(row["Sigorta Şirketi"])
+                                        # İptal etiketlerini bozmadan sadece şirket adını değiştir
+                                        if sir_val.replace(" (İPTAL-SATIŞ)", "").replace(" (İPTAL-ZEYL)", "").strip() == eski_isim_temiz:
+                                            yeni_sir_val = sir_val.replace(eski_isim_temiz, yeni_isim_temiz)
+                                            p_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=s_col_idx, value=yeni_sir_val))
+                                            
+                                if p_updates: ws_pol.update_cells(p_updates)
+                            return True
+                            
+                        if api_kalkani(_toplu_degistir):
+                            st.success("🎉 Başarıyla birleştirildi! Artık listede sadece tek bir isim çıkacak.")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
 
     elif menu == "⚙️ Sistem Ayarları":
         st.header("⚙️ Genel Ayarlar ve Sabitler")
