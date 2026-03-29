@@ -21,7 +21,7 @@ import random
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.60", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.61", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
@@ -70,7 +70,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.60 (Merkez Kasa & Profesyonel Excel İhracı)"
+VERSIYON = "v9.61 (Hata Onarımı & Merkez Kasa)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -508,6 +508,10 @@ else:
         df_pol = get_data("Policeler"); df_cari = get_data("Cari_Islemler")
         df_urunler = get_data("Ayarlar_Urunler"); df_acenteler = get_data("Ayarlar_Acenteler"); df_sirketler = get_data("Ayarlar_Sirketler")
 
+        # FIX: Kazanç hesaplamaları için oranları buraya (sayfanın başına) geri yükledim.
+        urun_oranlari = dict(zip(df_urunler['Urun_Adi'], df_urunler['Komisyon_Orani'])) if not df_urunler.empty else {}
+        acente_oranlari = dict(zip(df_acenteler['Acente_Adi'], df_acenteler['Tali_Oran'])) if not df_acenteler.empty else {}
+
         # ----------------------------------------
         # YENİ SEKME: AKTÜRK SİGORTA KASA KONSOLİDE
         # ----------------------------------------
@@ -565,7 +569,6 @@ else:
         with t1:
             acente_adlari = df_acenteler["Acente_Adi"].dropna().unique().tolist() if not df_acenteler.empty else []
             eski_taliler = df_cari[df_cari["Islem_Turu"] == "Tali Acente Carisi"]["Kisi_Kurum"].dropna().unique().tolist() if not df_cari.empty and "Kisi_Kurum" in df_cari.columns else []
-            # Merkez hesabı Tali Listesinden çıkartıldı, o artık patron hesabı.
             tali_listesi = sorted([x for x in list(set(acente_adlari + eski_taliler)) if str(x).strip() != "" and x != "AKTÜRK SİGORTA (MERKEZ)"])
             
             secilen_tali = st.selectbox("📌 Mutabakat Yapılacak Tali Acente:", ["Seçiniz..."] + tali_listesi, key="sel_tali")
@@ -925,17 +928,19 @@ else:
             ara = st.text_input("🔍 Müşteri Adı veya Plaka Yazın (Örn: 06EJA):")
             if ara:
                 ara_temiz = temiz_isim(ara)
+                # FIX: Kök poliçe hesaplaması artık filtreden ÖNCE yapılıyor (KeyError çözüldü)
+                df_pol['Kök_Poliçe'] = df_pol['Poliçe No'].apply(get_kok_police)
+                
                 mask = df_pol['Müşteri Adı Soyadı'].str.contains(ara_temiz, na=False) | df_pol['Plaka'].str.contains(ara_temiz, na=False) | df_pol['Poliçe No'].str.contains(ara_temiz, na=False)
                 ilk_sonuc = df_pol[mask].copy()
                 
                 if not ilk_sonuc.empty:
-                    df_pol['Kök_Poliçe'] = df_pol['Poliçe No'].apply(get_kok_police)
-                    eslesen_kokler = [k for k in df_pol.loc[mask, 'Kök_Poliçe'].dropna().unique().tolist() if str(k).strip() != ""]
+                    eslesen_kokler = [k for k in ilk_sonuc['Kök_Poliçe'].dropna().unique().tolist() if str(k).strip() != ""]
                     sonuc = df_pol[df_pol['Kök_Poliçe'].isin(eslesen_kokler) | mask].copy() if eslesen_kokler else ilk_sonuc.copy()
                     
                     tab1, tab2 = st.tabs(["🔗 Bağlamlı Görünüm", "📋 Klasik Liste Görünümü"])
                     with tab1:
-                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Kök Poliçe No: {x['Kök_Poliçe']} | Ürün: {str(x['Sigorta Türü']).strip()}" if str(x['Kök_Poliçe']).strip() != "" else f"Tekil Kayıt (No Yok) | {str(x['Sigorta Türü']).strip()}_{x.name}", axis=1)
+                        sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Kök Poliçe No: {x['Kök_Poliçe']} | Ürün: {str(x['Sigorta Türü']).strip()}" if str(x.get('Kök_Poliçe', '')).strip() != "" else f"Tekil Kayıt (No Yok) | {str(x['Sigorta Türü']).strip()}_{x.name}", axis=1)
                         for key, grup in sonuc.groupby('Baglam_Key'):
                             net_toplam = grup["Net Prim"].apply(sayiya_cevir).sum(); brut_toplam = grup["Brüt Prim"].apply(sayiya_cevir).sum(); kom_toplam = grup["Şirket Komisyonu"].apply(sayiya_cevir).sum()
                             durum = "🟢 AKTİF" if brut_toplam > 0 else ("🔴 TAMAMEN İPTAL" if len(grup) > 1 else "⚠️ DİKKAT")
