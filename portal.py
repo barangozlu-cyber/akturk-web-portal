@@ -32,7 +32,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v7.20 (Bölünmüş Üretim/Cari Ekstresi & Hata Düzeltmesi)"
+VERSIYON = "v8.0 (Kalıcı Hesap Planı & Acente Listesi Entegrasyonu)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -161,18 +161,32 @@ def df_gorsel_yap(df, para_sutunlari):
 
 def hesap_kodu_ekle(df, hesap_tipi):
     if df.empty: return df
-    
-    # Sütun adının farklı olma ihtimaline karşı dinamik kontrol (HATANIN ÇÖZÜMÜ BURASI)
     kolon = "Kisi_Kurum" if "Kisi_Kurum" in df.columns else ("Kişi / Kurum / Acente" if "Kişi / Kurum / Acente" in df.columns else None)
     if not kolon: return df
     
-    if hesap_tipi == "Müşteri": prefix = "120"
-    elif hesap_tipi == "Tali": prefix = "320.T"
-    else: prefix = "320.S" 
-    
-    uniques = sorted(df[kolon].dropna().unique())
-    hk_map = {val: f"{prefix}.{str(i+1).zfill(3)}" for i, val in enumerate(uniques)}
-    df.insert(0, "Hesap Kodu", df[kolon].map(hk_map))
+    hk_map = {}
+    if hesap_tipi == "Müşteri":
+        df_mus = get_data("Musteriler")
+        if not df_mus.empty and "Hesap_Kodu" in df_mus.columns and "Musteri_Adi" in df_mus.columns:
+            hk_map = dict(zip(df_mus["Musteri_Adi"], df_mus["Hesap_Kodu"]))
+        prefix = "120"
+    elif hesap_tipi == "Tali":
+        df_acn = get_data("Ayarlar_Acenteler")
+        if not df_acn.empty and "Hesap_Kodu" in df_acn.columns and "Acente_Adi" in df_acn.columns:
+            hk_map = dict(zip(df_acn["Acente_Adi"], df_acn["Hesap_Kodu"]))
+        prefix = "320.T"
+    else: 
+        prefix = "320.S"
+        
+    def kod_bul(isim):
+        isim = str(isim).strip()
+        if isim in hk_map and str(hk_map[isim]).strip(): return hk_map[isim]
+        # Eğer henüz Sheet'e yazılmamışsa geçici kod üretir
+        uniques = sorted(df[kolon].dropna().unique())
+        idx = uniques.index(isim) if isim in uniques else 0
+        return f"{prefix}.{str(idx+1).zfill(3)}"
+        
+    df.insert(0, "Hesap Kodu", df[kolon].apply(kod_bul))
     return df
 
 def excel_indir(df, buton_metni, dosya_adi):
@@ -541,7 +555,7 @@ else:
             adr = c17.text_area("Adres (Opsiyonel)", ana_pol_data.get("Adres", ""))
             
             if st.form_submit_button("✅ POLİÇEYİ, CARİYİ VE PDF'İ KAYDET"):
-                with st.spinner("Sisteme İşleniyor... (Google sunucuları yoğunsa sistem otomatik bekleyip tekrar dener)"):
+                with st.spinner("Sisteme İşleniyor..."):
                     def _kaydet_operasyonu():
                         doc = client.open_by_key(SHEET_ID)
                         aktif_acente = acn
@@ -649,50 +663,57 @@ else:
         acente_oranlari = dict(zip(df_acenteler['Acente_Adi'], df_acenteler['Tali_Oran'])) if not df_acenteler.empty else {}
 
         with t1:
-            if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
-                sirket_tali_listesi = df_cari[df_cari["Islem_Turu"].isin(["Tali Acente Carisi", "Sigorta Şirketi Carisi"])]["Kisi_Kurum"].dropna().unique().tolist()
-                secilen_kurum = st.selectbox("Mutabakat Yapılacak Şirket veya Tali Acente:", ["Seçiniz..."] + sorted(sirket_tali_listesi))
+            # Dropdown Listesinin Sheet'teki Ayarlar'dan Çekilmesi
+            acente_adlari = df_acenteler["Acente_Adi"].dropna().unique().tolist() if not df_acenteler.empty else []
+            if "Aktürk Sigorta (Merkez)" not in acente_adlari:
+                acente_adlari.insert(0, "Aktürk Sigorta (Merkez)")
                 
-                if secilen_kurum != "Seçiniz...":
-                    c_tarih1, c_tarih2 = st.columns(2)
-                    ilk_tarih = c_tarih1.date_input("Başlangıç Tarihi", datetime.today().replace(month=1, day=1))
-                    son_tarih = c_tarih2.date_input("Bitiş Tarihi", datetime.today())
-                    st.divider()
+            sirketler = []
+            if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
+                sirketler = df_cari[df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi"]["Kisi_Kurum"].dropna().unique().tolist()
+                
+            sirket_tali_listesi = sorted(list(set(acente_adlari + sirketler)))
+            secilen_kurum = st.selectbox("Mutabakat Yapılacak Şirket veya Tali Acente:", ["Seçiniz..."] + sirket_tali_listesi)
+            
+            if secilen_kurum != "Seçiniz...":
+                c_tarih1, c_tarih2 = st.columns(2)
+                ilk_tarih = c_tarih1.date_input("Başlangıç Tarihi", datetime.today().replace(month=1, day=1))
+                son_tarih = c_tarih2.date_input("Bitiş Tarihi", datetime.today())
+                st.divider()
 
-                    # ŞİRKET Mİ TALİ Mİ KONTROLÜ
+                is_sirket = False
+                if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
                     is_sirket = secilen_kurum in df_cari[df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi"]["Kisi_Kurum"].values
-                    is_tali = secilen_kurum in df_cari[df_cari["Islem_Turu"] == "Tali Acente Carisi"]["Kisi_Kurum"].values
 
-                    # --- 1. KISIM: POLİÇE ÜRETİM DETAYI (NET/BRÜT GÖSTERİMİ) ---
-                    st.markdown("#### 1️⃣ Dönem İçi Kesilen Poliçeler (Üretim Detayı)")
-                    if not df_pol.empty:
-                        if is_sirket:
-                            kurum_policeleri = df_pol[df_pol["Sigorta Şirketi"].str.replace(r' \(İPTAL-.*?\)', '', regex=True).str.strip() == secilen_kurum].copy()
-                        else:
-                            kurum_policeleri = df_pol[df_pol["Acente"] == secilen_kurum].copy()
-                        
-                        if not kurum_policeleri.empty:
-                            kurum_policeleri['Tarih_Obj'] = pd.to_datetime(kurum_policeleri['Tanzim Tarihi'], dayfirst=True, errors='coerce')
-                            mask_pol = (kurum_policeleri['Tarih_Obj'].dt.date >= ilk_tarih) & (kurum_policeleri['Tarih_Obj'].dt.date <= son_tarih)
-                            filtrelenmis_pol = kurum_policeleri[mask_pol]
-                            
-                            if not filtrelenmis_pol.empty:
-                                top_brut = filtrelenmis_pol["Brüt Prim"].apply(sayiya_cevir).sum()
-                                top_net = filtrelenmis_pol["Net Prim"].apply(sayiya_cevir).sum()
-                                st.info(f"💡 Seçilen tarihler arasında **{len(filtrelenmis_pol)} adet** poliçe kesildi. Toplam Brüt Üretim: **{para_format(top_brut)}** | Toplam Net Üretim: **{para_format(top_net)}**")
-                                
-                                goster_pol = df_gorsel_yap(filtrelenmis_pol[["Tanzim Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Şirketi", "Sigorta Türü", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]], ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
-                                st.dataframe(goster_pol, use_container_width=True)
-                                excel_indir(filtrelenmis_pol, "Poliçe Üretimlerini Excel İndir", f"{secilen_kurum}_Uretim_Listesi")
-                            else:
-                                st.warning("Bu tarih aralığında poliçe kesilmemiş.")
-                        else:
-                            st.warning("Bu kuruma ait poliçe kaydı bulunamadı.")
+                # --- 1. KISIM: POLİÇE ÜRETİM DETAYI (NET/BRÜT GÖSTERİMİ) ---
+                st.markdown(f"#### 1️⃣ {secilen_kurum} - Poliçe Üretim Detayı")
+                if not df_pol.empty:
+                    if is_sirket:
+                        kurum_policeleri = df_pol[df_pol["Sigorta Şirketi"].str.replace(r' \(İPTAL-.*?\)', '', regex=True).str.strip() == secilen_kurum].copy()
+                    else:
+                        kurum_policeleri = df_pol[df_pol["Acente"] == secilen_kurum].copy()
                     
-                    st.divider()
+                    if not kurum_policeleri.empty:
+                        kurum_policeleri['Tarih_Obj'] = pd.to_datetime(kurum_policeleri['Tanzim Tarihi'], dayfirst=True, errors='coerce')
+                        mask_pol = (kurum_policeleri['Tarih_Obj'].dt.date >= ilk_tarih) & (kurum_policeleri['Tarih_Obj'].dt.date <= son_tarih)
+                        filtrelenmis_pol = kurum_policeleri[mask_pol]
+                        
+                        if not filtrelenmis_pol.empty:
+                            top_brut = filtrelenmis_pol["Brüt Prim"].apply(sayiya_cevir).sum()
+                            top_net = filtrelenmis_pol["Net Prim"].apply(sayiya_cevir).sum()
+                            st.info(f"💡 Seçilen tarihler arasında **{len(filtrelenmis_pol)} adet** poliçe kesildi. Toplam Brüt Üretim: **{para_format(top_brut)}** | Toplam Net Üretim: **{para_format(top_net)}**")
+                            
+                            goster_pol = df_gorsel_yap(filtrelenmis_pol[["Tanzim Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Şirketi", "Sigorta Türü", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]], ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
+                            st.dataframe(goster_pol, use_container_width=True)
+                            excel_indir(filtrelenmis_pol, "Poliçe Üretimlerini Excel İndir", f"{secilen_kurum}_Uretim_Listesi")
+                        else: st.warning("Bu tarih aralığında poliçe kesilmemiş.")
+                    else: st.warning("Bu kuruma ait poliçe kaydı bulunamadı.")
+                
+                st.divider()
 
-                    # --- 2. KISIM: FİNANSAL MUTABAKAT VE EKSTRE (KOMİSYON ÜZERİNDEN) ---
-                    st.markdown("#### 2️⃣ Finansal Mutabakat ve Ödemeler (Cari Ekstre)")
+                # --- 2. KISIM: FİNANSAL MUTABAKAT VE EKSTRE ---
+                st.markdown(f"#### 2️⃣ {secilen_kurum} - Finansal Mutabakat ve Ödemeler (Cari Ekstre)")
+                if not df_cari.empty:
                     kurum_carisi = df_cari[df_cari["Kisi_Kurum"] == secilen_kurum].copy()
                     if not kurum_carisi.empty:
                         kurum_carisi = hesap_kodu_ekle(kurum_carisi, "Şirket" if is_sirket else "Tali")
@@ -712,36 +733,30 @@ else:
                         st.dataframe(df_ui_cari, use_container_width=True)
                         excel_indir(filtrelenmis_cari[["Hesap Kodu", "Tarih", "Islem_Detayi", "Borc", "Alacak", "Odeme_Tipi"]], "Cari Ekstreyi Excel İndir", f"{secilen_kurum}_Ekstre")
 
-                    st.divider()
-                    with st.form("kurum_islem", clear_on_submit=True):
-                        st.markdown(f"💳 **{secilen_kurum} - Fatura, Gider Belgesi ve Tahsilat İşlemi**")
-                        c1, c2, c3, c4 = st.columns(4)
-                        o_tarih = c1.date_input("İşlem Tarihi").strftime("%d.%m.%Y")
-                        islem_yonu = c2.selectbox("İşlem Türü (Mutabakat)", [
-                            "💰 Ödeme Geldi (Bize Yapılan Tahsilat)", 
-                            "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)", 
-                            "📄 Fatura / Komisyon Belgesi Kesildi (Sadece Evrak)"
-                        ])
-                        o_tutar = float(sayiya_cevir(c3.text_input("Tutar (Örn: 1500,50)", value="")))
-                        o_detay = c4.text_input("Açıklama (Örn: Mart Ayı Komisyon Belgesi)")
-                        
-                        if st.form_submit_button("İşlemi Kaydet"):
-                            with st.spinner("İşleniyor, lütfen bekleyiniz..."):
-                                def _kurum_odeme():
-                                    if islem_yonu == "💰 Ödeme Geldi (Bize Yapılan Tahsilat)":
-                                        borc_yaz, alacak_yaz = 0.0, o_tutar
-                                    elif islem_yonu == "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)":
-                                        borc_yaz, alacak_yaz = o_tutar, 0.0
-                                    else:
-                                        borc_yaz, alacak_yaz = 0.0, 0.0
-                                        
-                                    tur_belirle = "Sigorta Şirketi Carisi" if secilen_kurum in df_cari[df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi"]["Kisi_Kurum"].values else "Tali Acente Carisi"
+                st.divider()
+                with st.form("kurum_islem", clear_on_submit=True):
+                    st.markdown(f"💳 **Fatura, Gider Belgesi ve Tahsilat İşlemi**")
+                    c1, c2, c3, c4 = st.columns(4)
+                    o_tarih = c1.date_input("İşlem Tarihi").strftime("%d.%m.%Y")
+                    islem_yonu = c2.selectbox("İşlem Türü (Mutabakat)", [
+                        "💰 Ödeme Geldi (Bize Yapılan Tahsilat)", 
+                        "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)", 
+                        "📄 Fatura / Komisyon Belgesi Kesildi (Sadece Evrak)"
+                    ])
+                    o_tutar = float(sayiya_cevir(c3.text_input("Tutar (Örn: 1500,50)", value="")))
+                    o_detay = c4.text_input("Açıklama (Örn: Mart Ayı Komisyon Belgesi)")
+                    
+                    if st.form_submit_button("İşlemi Kaydet"):
+                        with st.spinner("İşleniyor..."):
+                            def _kurum_odeme():
+                                if islem_yonu == "💰 Ödeme Geldi (Bize Yapılan Tahsilat)": borc_yaz, alacak_yaz = 0.0, o_tutar
+                                elif islem_yonu == "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)": borc_yaz, alacak_yaz = o_tutar, 0.0
+                                else: borc_yaz, alacak_yaz = 0.0, 0.0
                                     
-                                    client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").append_row([o_tarih, tur_belirle, secilen_kurum, f"{islem_yonu} - {o_detay}", borc_yaz, alacak_yaz, "Banka/Resmi Evrak", 1], value_input_option='USER_ENTERED')
-                                    return True
-                                    
-                                if api_kalkani(_kurum_odeme) is not None:
-                                    st.cache_data.clear(); st.rerun()
+                                tur_belirle = "Sigorta Şirketi Carisi" if secilen_kurum in sirketler else "Tali Acente Carisi"
+                                client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").append_row([o_tarih, tur_belirle, secilen_kurum, f"{islem_yonu} - {o_detay}", borc_yaz, alacak_yaz, "Banka/Resmi Evrak", 1], value_input_option='USER_ENTERED')
+                                return True
+                            if api_kalkani(_kurum_odeme): st.cache_data.clear(); st.rerun()
 
         with t2:
             if not df_cari.empty and "Kisi_Kurum" in df_cari.columns:
@@ -784,74 +799,48 @@ else:
                                     m_alc = m_tutar if m_yon == "Müşteriden Para Geldi (Tahsilat)" else 0.0
                                     client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").append_row([m_tarih, "Müşteri Carisi", secilen_musteri, m_detay, m_borc, m_alc, "Nakit/Havale", 1], value_input_option='USER_ENTERED')
                                     return True
-                                if api_kalkani(_mus_odeme) is not None:
-                                    st.cache_data.clear(); st.rerun()
+                                if api_kalkani(_mus_odeme) is not None: st.cache_data.clear(); st.rerun()
 
         with t3:
-            sub1, sub2, sub3 = st.tabs(["📋 Müşteri Bilançoları (Tablo)", "📋 Şirket ve Tali Bilançoları (Tablo)", "📈 Gelir ve Üretim Analizi (Grafik)"])
-            
+            sub1, sub2, sub3 = st.tabs(["📋 Müşteri Bilançoları", "📋 Şirket ve Tali Bilançoları", "📈 Gelir ve Üretim Analizi"])
             if not df_cari.empty:
                 df_ozet = df_cari.copy()
-                df_ozet["Borc"] = df_ozet["Borc"].apply(sayiya_cevir)
-                df_ozet["Alacak"] = df_ozet["Alacak"].apply(sayiya_cevir)
-                
+                df_ozet["Borc"] = df_ozet["Borc"].apply(sayiya_cevir); df_ozet["Alacak"] = df_ozet["Alacak"].apply(sayiya_cevir)
                 grup = df_ozet.groupby(["Islem_Turu", "Kisi_Kurum"])[["Borc", "Alacak"]].sum().reset_index()
                 grup["Bakiye"] = grup["Borc"] - grup["Alacak"]
-                
-                def durum_belirle(row):
-                    b = round(row["Bakiye"], 2)
-                    if b > 0: return "🔴 Bize Borçlu (Alacağımız)"
-                    elif b < 0: return "🟢 Biz Borçluyuz (Ödenecek)"
-                    else: return "⚪ Hesabı Kapalı (Dengede)"
-                    
-                grup["Durum"] = grup.apply(durum_belirle, axis=1)
+                grup["Durum"] = grup.apply(lambda row: "🔴 Bize Borçlu" if round(row["Bakiye"], 2) > 0 else ("🟢 Biz Borçluyuz" if round(row["Bakiye"], 2) < 0 else "⚪ Kapalı"), axis=1)
                 grup.rename(columns={"Islem_Turu": "Hesap Türü", "Kisi_Kurum": "Kişi / Kurum / Acente", "Borc": "Toplam Borç", "Alacak": "Toplam Alacak", "Bakiye": "Dip Tutar (Bakiye)"}, inplace=True)
                 
                 with sub1:
                     df_musteri_bilanco = grup[grup["Hesap Türü"] == "Müşteri Carisi"].copy()
-                    df_musteri_bilanco = hesap_kodu_ekle(df_musteri_bilanco, "Müşteri")
-                    df_musteri_bilanco = df_musteri_bilanco.sort_values(by="Dip Tutar (Bakiye)", ascending=False)
-                    
-                    df_ui_m = df_gorsel_yap(df_musteri_bilanco, ["Toplam Borç", "Toplam Alacak", "Dip Tutar (Bakiye)"])
-                    st.dataframe(df_ui_m, use_container_width=True)
+                    df_musteri_bilanco = hesap_kodu_ekle(df_musteri_bilanco, "Müşteri").sort_values(by="Dip Tutar (Bakiye)", ascending=False)
+                    st.dataframe(df_gorsel_yap(df_musteri_bilanco, ["Toplam Borç", "Toplam Alacak", "Dip Tutar (Bakiye)"]), use_container_width=True)
                     excel_indir(df_musteri_bilanco, "Müşteri Bilançosunu Excel İndir", "Musteri_Bilanco_Raporu")
 
                 with sub2:
                     df_tali_sirket = grup[grup["Hesap Türü"].isin(["Tali Acente Carisi", "Sigorta Şirketi Carisi"])].copy()
-                    
                     hk_liste = []
-                    for idx, row in df_tali_sirket.iterrows():
-                        if row["Hesap Türü"] == "Sigorta Şirketi Carisi": hk_liste.append("320.S")
-                        else: hk_liste.append("320.T")
+                    for idx, row in df_tali_sirket.iterrows(): hk_liste.append("320.S" if row["Hesap Türü"] == "Sigorta Şirketi Carisi" else "320.T")
                     df_tali_sirket["Prefix"] = hk_liste
-                    
                     df_tali_sirket["Hesap Kodu"] = df_tali_sirket.apply(lambda x: f"{x['Prefix']}.{str(df_tali_sirket.index.get_loc(x.name) + 1).zfill(3)}", axis=1)
                     df_tali_sirket.drop(columns=["Prefix"], inplace=True)
-                    
                     cols = ["Hesap Kodu"] + [c for c in df_tali_sirket.columns if c != "Hesap Kodu"]
                     df_tali_sirket = df_tali_sirket[cols].sort_values(by="Dip Tutar (Bakiye)", ascending=False)
-                    
-                    df_ui_t = df_gorsel_yap(df_tali_sirket, ["Toplam Borç", "Toplam Alacak", "Dip Tutar (Bakiye)"])
-                    st.dataframe(df_ui_t, use_container_width=True)
+                    st.dataframe(df_gorsel_yap(df_tali_sirket, ["Toplam Borç", "Toplam Alacak", "Dip Tutar (Bakiye)"]), use_container_width=True)
                     excel_indir(df_tali_sirket, "Şirket/Tali Bilançosunu Excel İndir", "Kurum_Bilanco_Raporu")
                     
             with sub3:
                 st.markdown("### 📈 Dönemsel Gelir ve Üretim Grafikleri")
-                
                 c_f1, c_f2 = st.columns(2)
                 g_basla = c_f1.date_input("Analiz Başlangıç Tarihi", datetime.today().replace(day=1, month=1))
                 g_bitis = c_f2.date_input("Analiz Bitiş Tarihi", datetime.today())
-                
                 if not df_pol.empty:
                     df_g = df_pol.copy()
                     df_g['Tarih_Obj'] = pd.to_datetime(df_g['Tanzim Tarihi'], dayfirst=True, errors='coerce')
-                    mask_g = (df_g['Tarih_Obj'].dt.date >= g_basla) & (df_g['Tarih_Obj'].dt.date <= g_bitis)
-                    df_g = df_g[mask_g]
-                    
+                    df_g = df_g[(df_g['Tarih_Obj'].dt.date >= g_basla) & (df_g['Tarih_Obj'].dt.date <= g_bitis)]
                     if not df_g.empty:
                         tum_acenteler = ["Tüm Acenteler (Genel)"] + df_g["Acente"].dropna().unique().tolist()
                         tum_urunler = ["Tüm Ürünler (Genel)"] + df_g["Sigorta Türü"].dropna().unique().tolist()
-                        
                         c_f3, c_f4 = st.columns(2)
                         sec_acente_g = c_f3.selectbox("Acente Filtresi", tum_acenteler)
                         sec_urun_g = c_f4.selectbox("Ürün Türü Filtresi (Trafik, Kasko vb.)", tum_urunler)
@@ -860,22 +849,17 @@ else:
                         if sec_urun_g != "Tüm Ürünler (Genel)": df_g = df_g[df_g["Sigorta Türü"] == sec_urun_g]
                         
                         if not df_g.empty:
-                            df_g["Net Prim"] = df_g["Net Prim"].apply(sayiya_cevir)
-                            df_g["Brüt Prim"] = df_g["Brüt Prim"].apply(sayiya_cevir)
-                            
+                            df_g["Net Prim"] = df_g["Net Prim"].apply(sayiya_cevir); df_g["Brüt Prim"] = df_g["Brüt Prim"].apply(sayiya_cevir)
                             def calc_kazanc(row):
                                 kom = sayiya_cevir(row.get("Şirket Komisyonu", 0))
                                 if kom == 0:
                                     u_or = float(sayiya_cevir(urun_oranlari.get(row.get("Sigorta Türü", ""), 0.0)))
-                                    if u_or > 1: u_or /= 100
-                                    kom = row["Net Prim"] * u_or
-                                
+                                    kom = row["Net Prim"] * (u_or / 100 if u_or > 1 else u_or)
                                 acn = row.get("Acente", "Aktürk Sigorta (Merkez)")
                                 if acn == "Aktürk Sigorta (Merkez)": return kom
                                 else:
                                     t_or = float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))
-                                    if t_or > 1: t_or /= 100
-                                    return kom * t_or
+                                    return kom * (t_or / 100 if t_or > 1 else t_or)
                                     
                             df_g["Aktürk Sigorta Kazancı"] = df_g.apply(calc_kazanc, axis=1)
                             df_g["Ay-Yıl"] = df_g["Tarih_Obj"].dt.strftime('%Y-%m')
@@ -884,19 +868,15 @@ else:
                             m1.metric("📊 Toplam Net Üretim", para_format(df_g["Net Prim"].sum()))
                             m2.metric("💰 Toplam Aktürk Kazancı", para_format(df_g["Aktürk Sigorta Kazancı"].sum()))
                             m3.metric("📝 Toplam İşlem Adedi", len(df_g))
-                            
                             st.divider()
                             st.markdown("#### 📅 Aylık Üretim ve Kazanç Trendi")
                             grup_aylik = df_g.groupby("Ay-Yıl")[["Net Prim", "Aktürk Sigorta Kazancı"]].sum().reset_index()
                             grup_aylik.rename(columns={"Net Prim": "Net Üretim"}, inplace=True)
                             st.bar_chart(grup_aylik.set_index("Ay-Yıl"), color=["#2980B9", "#27AE60"])
-                        else: st.warning("Seçilen kriterlere uyan veri bulunamadı.")
-                else: st.warning("Sistemde analiz edilecek poliçe kaydı yok.")
 
     elif menu == "📅 Yenileme Takvimi":
         st.header("📅 Özgür Yenileme Takibi")
         df_pol = get_data("Policeler")
-        
         t_col1, t_col2 = st.columns(2)
         takvim_basla = t_col1.date_input("Takvim Başlangıç", datetime.today())
         takvim_bitis = t_col2.date_input("Takvim Bitiş", datetime.today() + timedelta(days=30))
@@ -904,9 +884,7 @@ else:
 
         if not df_pol.empty and "Bitiş Tarihi" in df_pol.columns:
             df_pol['Bit_Obj'] = pd.to_datetime(df_pol['Bitiş Tarihi'], dayfirst=True, errors='coerce')
-            mask_takvim = (df_pol['Bit_Obj'].dt.date >= takvim_basla) & (df_pol['Bit_Obj'].dt.date <= takvim_bitis)
-            takvim_temel = df_pol[mask_takvim].copy()
-
+            takvim_temel = df_pol[(df_pol['Bit_Obj'].dt.date >= takvim_basla) & (df_pol['Bit_Obj'].dt.date <= takvim_bitis)].copy()
             takvim_temel = takvim_temel[~takvim_temel["Sigorta Şirketi"].str.contains("İPTAL", na=False)]
             takvim_temel = takvim_temel[takvim_temel["Başlangıç Tarihi"] != takvim_temel["Bitiş Tarihi"]]
 
@@ -916,7 +894,6 @@ else:
             
             takvim_temel = takvim_temel[~takvim_temel["Plaka"].isin(iptal_plakalar)]
             takvim_temel = takvim_temel[~((takvim_temel["Plaka"] == "") & (takvim_temel["Müşteri Adı Soyadı"].isin(iptal_musteriler)))]
-
             takvim_temel["Kalan Gün"] = (takvim_temel['Bit_Obj'].dt.normalize() - pd.Timestamp.today().normalize()).dt.days
             takvim = takvim_temel.sort_values("Kalan Gün")
             
@@ -927,12 +904,9 @@ else:
                     if gun <= 30: return "🟡 YAKLAŞIYOR"
                     return "🟢 SÜRESİ VAR"
                 takvim["DURUM"] = takvim["Kalan Gün"].apply(uyari)
-                
                 gosterim = ["DURUM", "Kalan Gün", "Bitiş Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Sigorta Şirketi", "Telefon / E-mail"]
                 if "PDF Linki" in takvim.columns: gosterim.append("PDF Linki")
-                
-                df_ui_takvim = df_gorsel_yap(takvim, [])
-                st.dataframe(df_ui_takvim[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
+                st.dataframe(df_gorsel_yap(takvim, [])[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
                 excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi")
             else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
 
@@ -945,68 +919,47 @@ else:
                 ara_temiz = temiz_isim(ara)
                 mask = df_pol['Müşteri Adı Soyadı'].str.contains(ara_temiz, na=False) | df_pol['Plaka'].str.contains(ara_temiz, na=False) | df_pol['Poliçe No'].str.contains(ara_temiz, na=False)
                 ilk_sonuc = df_pol[mask].copy()
-                
                 if not ilk_sonuc.empty:
                     df_pol['Kök_Poliçe'] = df_pol['Poliçe No'].apply(get_kok_police)
-                    aranan_kokler = df_pol.loc[mask, 'Kök_Poliçe'].dropna().unique().tolist()
-                    
-                    sonuc = df_pol[df_pol['Kök_Poliçe'].isin(aranan_kokler)].copy()
+                    sonuc = df_pol[df_pol['Kök_Poliçe'].isin(df_pol.loc[mask, 'Kök_Poliçe'].dropna().unique().tolist())].copy()
                     
                     tab1, tab2 = st.tabs(["🔗 Bağlamlı Görünüm", "📋 Klasik Liste Görünümü"])
-                    
                     with tab1:
                         sonuc['Baglam_Key'] = sonuc.apply(lambda x: f"Kök Poliçe No: {x['Kök_Poliçe']} | Ürün: {str(x['Sigorta Türü']).strip()}", axis=1)
-                        gruplar = sonuc.groupby('Baglam_Key')
-                        
-                        st.info("💡 Alt poliçeleri (Zeyl, İptal, Yenileme) görmek için klasörlerin üzerine tıklayın. Sistem plaka değişse bile kök poliçeyi bularak tüm işlemleri tek klasörde toplar.")
-                        
-                        for key, grup in gruplar:
+                        for key, grup in sonuc.groupby('Baglam_Key'):
                             net_toplam = grup["Net Prim"].apply(sayiya_cevir).sum()
                             brut_toplam = grup["Brüt Prim"].apply(sayiya_cevir).sum()
                             kom_toplam = grup["Şirket Komisyonu"].apply(sayiya_cevir).sum()
-                            
                             durum = "🟢 AKTİF" if brut_toplam > 0 else ("🔴 TAMAMEN İPTAL" if len(grup) > 1 else "⚠️ DİKKAT")
-                            musteri_adi = grup.iloc[0]["Müşteri Adı Soyadı"]
-                            
-                            with st.expander(f"📁 {musteri_adi} -> {key} | Kalan Brüt: {para_format(brut_toplam)} | {durum}"):
+                            with st.expander(f"📁 {grup.iloc[0]['Müşteri Adı Soyadı']} -> {key} | Kalan Brüt: {para_format(brut_toplam)} | {durum}"):
                                 st.markdown(f"**💰 Poliçenin Güncel Net Primi:** {para_format(net_toplam)} | **Kalan Net Komisyon:** {para_format(kom_toplam)}")
-                                df_ui_grup = df_gorsel_yap(grup, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
-                                goster_sutunlar = ["Tanzim Tarihi", "Sigorta Şirketi", "Plaka", "Net Prim", "Brüt Prim", "Şirket Komisyonu", "PDF Linki"]
-                                st.dataframe(df_ui_grup[goster_sutunlar], column_config=STIL_AYARLARI, use_container_width=True)
-                    
+                                st.dataframe(df_gorsel_yap(grup, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])[["Tanzim Tarihi", "Sigorta Şirketi", "Plaka", "Net Prim", "Brüt Prim", "Şirket Komisyonu", "PDF Linki"]], column_config=STIL_AYARLARI, use_container_width=True)
                     with tab2:
                         df_ui_arama = df_gorsel_yap(sonuc, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
-                        goster_sutunlar = [c for c in df_ui_arama.columns if c not in ["Sheet_Row", "Baglam_Key", "Kök_Poliçe"]]
-                        st.dataframe(df_ui_arama[goster_sutunlar], column_config=STIL_AYARLARI, use_container_width=True)
+                        st.dataframe(df_ui_arama[[c for c in df_ui_arama.columns if c not in ["Sheet_Row", "Baglam_Key", "Kök_Poliçe"]]], column_config=STIL_AYARLARI, use_container_width=True)
                         excel_indir(sonuc, "Arama Sonuçlarını Excel İndir", f"Arama_Sonucu_{ara_temiz}")
                 else: 
                     st.warning("Eşleşen tam kayıt bulunamadı.")
-                    tum_isimler = df_pol['Müşteri Adı Soyadı'].dropna().unique().tolist()
-                    tum_plakalar = df_pol['Plaka'].dropna().unique().tolist()
-                    aranacak_liste = [str(x) for x in tum_isimler + tum_plakalar if str(x).strip() != ""]
-                    oneriler = difflib.get_close_matches(ara_temiz, aranacak_liste, n=3, cutoff=0.6)
+                    tum = [str(x) for x in df_pol['Müşteri Adı Soyadı'].dropna().unique().tolist() + df_pol['Plaka'].dropna().unique().tolist() if str(x).strip() != ""]
+                    oneriler = difflib.get_close_matches(ara_temiz, tum, n=3, cutoff=0.6)
                     if oneriler: st.info(f"💡 **Bunu mu demek istediniz:** {', '.join(oneriler)}")
 
     elif menu == "🛠️ Düzeltme & Silme":
         st.header("🛠️ Kayıt Düzeltme ve Silme Merkezi")
-        t1, t2, t3, t4 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar (YENİ)"])
+        t1, t2, t3, t4 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Poliçe Sil", "🗑️ Serbest Cari Kaydı Sil", "🚑 Rakam/Cari Onar"])
         
         with t1:
-            st.markdown("### Tüm Sistemde Müşteri Bilgilerini Güncelle")
             df_mus = get_data("Musteriler")
             if not df_mus.empty:
-                musteri_listesi = df_mus["Musteri_Adi"].dropna().unique().tolist()
-                secilen_mus = st.selectbox("Düzeltilecek Müşteriyi Seçin:", ["Seçiniz..."] + sorted(musteri_listesi))
-                
+                secilen_mus = st.selectbox("Düzeltilecek Müşteriyi Seçin:", ["Seçiniz..."] + sorted(df_mus["Musteri_Adi"].dropna().unique().tolist()))
                 if secilen_mus != "Seçiniz...":
                     mus_bilgi = df_mus[df_mus["Musteri_Adi"] == secilen_mus].iloc[0]
                     with st.form("mus_duzelt"):
                         yeni_isim = st.text_input("Müşteri Adı Soyadı", value=secilen_mus)
                         yeni_tc = st.text_input("TC / VKN", value=str(mus_bilgi.get("TC_VKN", "")))
                         yeni_tel = st.text_input("Telefon", value=str(mus_bilgi.get("Telefon", "")))
-                        
                         if st.form_submit_button("💾 Güncelle ve Tüm Sisteme Uygula"):
-                            with st.spinner("Güncelleniyor... Lütfen bekleyiniz..."):
+                            with st.spinner("Güncelleniyor..."):
                                 def _mus_guncelle():
                                     doc = client.open_by_key(SHEET_ID)
                                     y_isim_temiz = temiz_isim(yeni_isim)
@@ -1023,48 +976,31 @@ else:
                                         df_pol = get_data("Policeler")
                                         ws_pol = doc.worksheet("Policeler")
                                         p_headers = ws_pol.row_values(1)
-                                        p_updates = []
-                                        if "Müşteri Adı Soyadı" in p_headers:
-                                            p_col = p_headers.index("Müşteri Adı Soyadı") + 1
-                                            for idx, row in df_pol[df_pol["Müşteri Adı Soyadı"] == secilen_mus].iterrows():
-                                                p_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=p_col, value=y_isim_temiz))
+                                        p_updates = [gspread.Cell(row=int(row["Sheet_Row"]), col=p_headers.index("Müşteri Adı Soyadı")+1, value=y_isim_temiz) for idx, row in df_pol[df_pol["Müşteri Adı Soyadı"] == secilen_mus].iterrows() if "Müşteri Adı Soyadı" in p_headers]
                                         if p_updates: ws_pol.update_cells(p_updates)
                                         
                                         df_cari = get_data("Cari_Islemler")
                                         ws_cari = doc.worksheet("Cari_Islemler")
                                         c_headers = ws_cari.row_values(1)
-                                        c_updates = []
-                                        if "Kisi_Kurum" in c_headers:
-                                            c_col = c_headers.index("Kisi_Kurum") + 1
-                                            for idx, row in df_cari[(df_cari["Kisi_Kurum"] == secilen_mus) & (df_cari["Islem_Turu"] == "Müşteri Carisi")].iterrows():
-                                                c_updates.append(gspread.Cell(row=int(row["Sheet_Row"]), col=c_col, value=y_isim_temiz))
+                                        c_updates = [gspread.Cell(row=int(row["Sheet_Row"]), col=c_headers.index("Kisi_Kurum")+1, value=y_isim_temiz) for idx, row in df_cari[(df_cari["Kisi_Kurum"] == secilen_mus) & (df_cari["Islem_Turu"] == "Müşteri Carisi")].iterrows() if "Kisi_Kurum" in c_headers]
                                         if c_updates: ws_cari.update_cells(c_updates)
                                     return y_isim_temiz
-                                    
-                                y_isim = api_kalkani(_mus_guncelle)
-                                if y_isim is not None:
-                                    st.success(f"Başarılı! Müşteri '{y_isim}' olarak tüm sistemde güncellendi.")
-                                    st.cache_data.clear(); st.rerun()
+                                if api_kalkani(_mus_guncelle): st.success("Başarılı!"); st.cache_data.clear(); st.rerun()
 
         with t2:
-            st.markdown("### Hatalı Poliçeyi Sil")
             df_pol = get_data("Policeler")
             if not df_pol.empty:
-                ara_pol = st.text_input("Silmek istediğiniz poliçeyi arayın (Plaka, Poliçe No, Müşteri):").upper()
-                if ara_pol:
-                    ara_pol_t = temiz_isim(ara_pol)
-                    mask = df_pol['Müşteri Adı Soyadı'].str.contains(ara_pol_t, na=False) | df_pol['Plaka'].str.contains(ara_pol_t, na=False) | df_pol['Poliçe No'].str.contains(ara_pol_t, na=False)
-                    sonuc = df_pol[mask]
+                ara_pol_t = temiz_isim(st.text_input("Silmek istediğiniz poliçeyi arayın (Plaka, Poliçe No, Müşteri):").upper())
+                if ara_pol_t:
+                    sonuc = df_pol[df_pol['Müşteri Adı Soyadı'].str.contains(ara_pol_t, na=False) | df_pol['Plaka'].str.contains(ara_pol_t, na=False) | df_pol['Poliçe No'].str.contains(ara_pol_t, na=False)]
                     if not sonuc.empty:
-                        silinecek_secim = st.selectbox("Silinecek Poliçeyi Seçin:", sonuc.apply(lambda x: f"{x['Tanzim Tarihi']} | {x['Müşteri Adı Soyadı']} | {x['Plaka']} | {x['Sigorta Türü']} | Brüt: {x['Brüt Prim']} (Satır:{x['Sheet_Row']})", axis=1).tolist())
+                        silinecek_secim = st.selectbox("Silinecek Poliçeyi Seçin:", sonuc.apply(lambda x: f"{x['Tanzim Tarihi']} | {x['Müşteri Adı Soyadı']} | {x['Plaka']} | Brüt: {x['Brüt Prim']} (Satır:{x['Sheet_Row']})", axis=1).tolist())
                         if st.button("🚨 Seçili Poliçeyi TAMAMEN SİL", type="primary"):
-                            with st.spinner("Poliçe ve Cari Kayıtlar siliniyor... Lütfen bekleyiniz..."):
+                            with st.spinner("Poliçe ve Cari Kayıtlar siliniyor..."):
                                 def _police_sil():
                                     satir_no = int(re.search(r'\(Satır:(\d+)\)', silinecek_secim).group(1))
                                     s_row = sonuc[sonuc["Sheet_Row"] == satir_no].iloc[0]
-                                    pdf_linki = s_row.get("PDF Linki", "Yok")
-                                    drive_pdf_sil(pdf_linki)
-                                    
+                                    drive_pdf_sil(s_row.get("PDF Linki", "Yok"))
                                     doc = client.open_by_key(SHEET_ID)
                                     doc.worksheet("Policeler").delete_rows(satir_no)
                                     
@@ -1072,79 +1008,49 @@ else:
                                     df_cari = get_data("Cari_Islemler")
                                     if not df_cari.empty:
                                         bagli_cariler = df_cari[df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False)]
-                                        if not bagli_cariler.empty:
-                                            sil_satirlar = sorted(bagli_cariler["Sheet_Row"].astype(int).tolist(), reverse=True)
-                                            ws_cari = doc.worksheet("Cari_Islemler")
-                                            for c_satir in sil_satirlar: ws_cari.delete_rows(c_satir)
+                                        ws_cari = doc.worksheet("Cari_Islemler")
+                                        for c_satir in sorted(bagli_cariler["Sheet_Row"].astype(int).tolist(), reverse=True): ws_cari.delete_rows(c_satir)
                                     return True
-                                
-                                if api_kalkani(_police_sil):
-                                    st.success("Poliçe, PDF dosyası ve bağlı cari işlemler kalıcı olarak silindi!")
-                                    st.cache_data.clear(); st.rerun()
+                                if api_kalkani(_police_sil): st.success("Kalıcı olarak silindi!"); st.cache_data.clear(); st.rerun()
 
         with t3:
-            st.markdown("### Serbest Cari Kaydı Sil")
             df_cari = get_data("Cari_Islemler")
             if not df_cari.empty:
-                ara_cari = st.text_input("Silinecek Cari Kaydını Arayın (Müşteri, Tutar, Açıklama vb.):").upper()
-                if ara_cari:
-                    ara_c_t = temiz_isim(ara_cari)
-                    mask_c = df_cari['Kisi_Kurum'].str.contains(ara_c_t, na=False) | df_cari['Islem_Detayi'].str.contains(ara_c_t, na=False) | df_cari['Borc'].astype(str).str.contains(ara_c_t, na=False) | df_cari['Alacak'].astype(str).str.contains(ara_c_t, na=False)
-                    sonuc_c = df_cari[mask_c]
+                ara_c_t = temiz_isim(st.text_input("Silinecek Cari Kaydını Arayın (Müşteri, Tutar, Açıklama vb.):").upper())
+                if ara_c_t:
+                    sonuc_c = df_cari[df_cari['Kisi_Kurum'].str.contains(ara_c_t, na=False) | df_cari['Islem_Detayi'].str.contains(ara_c_t, na=False) | df_cari['Borc'].astype(str).str.contains(ara_c_t, na=False) | df_cari['Alacak'].astype(str).str.contains(ara_c_t, na=False)]
                     if not sonuc_c.empty:
                         sil_c_sec = st.selectbox("Silinecek İşlemi Seçin:", sonuc_c.apply(lambda x: f"{x['Tarih']} | {x['Kisi_Kurum']} | {x['Islem_Detayi']} | Borç: {x['Borc']} / Alacak: {x['Alacak']} (Satır:{x['Sheet_Row']})", axis=1).tolist())
                         if st.button("🚨 Bu Cari Kaydını SİL", type="primary"):
                             with st.spinner("Siliniyor..."):
                                 def _cari_sil():
-                                    c_satir_no = int(re.search(r'\(Satır:(\d+)\)', sil_c_sec).group(1))
-                                    client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").delete_rows(c_satir_no)
+                                    client.open_by_key(SHEET_ID).worksheet("Cari_Islemler").delete_rows(int(re.search(r'\(Satır:(\d+)\)', sil_c_sec).group(1)))
                                     return True
-                                if api_kalkani(_cari_sil):
-                                    st.success("Cari kayıt başarıyla silindi!")
-                                    st.cache_data.clear(); st.rerun()
-                    
+                                if api_kalkani(_cari_sil): st.success("Silindi!"); st.cache_data.clear(); st.rerun()
+
         with t4:
-            st.markdown("### 🚑 Toplu Rakam ve Cari Onarım Motoru")
             df_pol = get_data("Policeler")
             if not df_pol.empty:
-                ara_hata = st.text_input("Düzeltilecek Müşterinin Adını veya Plakasını Yazın:")
-                if ara_hata:
-                    ara_hata_t = temiz_isim(ara_hata)
-                    mask_hata = df_pol['Müşteri Adı Soyadı'].str.contains(ara_hata_t, na=False) | df_pol['Plaka'].str.contains(ara_hata_t, na=False)
-                    hatali_df = df_pol[mask_hata].copy()
-                else:
-                    df_pol_sirali = df_pol.copy()
-                    df_pol_sirali["Brüt_Siralama"] = df_pol_sirali["Brüt Prim"].apply(sayiya_cevir)
-                    hatali_df = df_pol_sirali.sort_values(by="Brüt_Siralama", ascending=False).head(10).copy()
+                ara_hata_t = temiz_isim(st.text_input("Düzeltilecek Müşterinin Adını veya Plakasını Yazın:"))
+                hatali_df = df_pol[df_pol['Müşteri Adı Soyadı'].str.contains(ara_hata_t, na=False) | df_pol['Plaka'].str.contains(ara_hata_t, na=False)].copy() if ara_hata_t else df_pol.assign(Brüt_Siralama=df_pol["Brüt Prim"].apply(sayiya_cevir)).sort_values("Brüt_Siralama", ascending=False).head(10).copy()
                 
                 if not hatali_df.empty:
-                    edit_cols = ["Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Acente", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]
-                    df_to_edit_hata = hatali_df[edit_cols].copy()
-                    
+                    df_to_edit_hata = hatali_df[["Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Acente", "Net Prim", "Brüt Prim", "Şirket Komisyonu"]].copy()
                     for c in ["Net Prim", "Brüt Prim", "Şirket Komisyonu"]: df_to_edit_hata[c] = df_to_edit_hata[c].apply(editor_icin_hazirla)
-                        
                     edited_hata_df = st.data_editor(df_to_edit_hata, key="hata_motoru", disabled=["Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Acente"], use_container_width=True)
                     
                     if st.button("🚀 Düzeltmeleri Kaydet ve CARİLERE YANSIT", type="primary"):
-                        with st.spinner("Poliçeler ve Cari Hesaplar onarılıyor... Lütfen bekleyiniz..."):
+                        with st.spinner("Onarılıyor..."):
                             def _hata_onar():
                                 doc = client.open_by_key(SHEET_ID)
-                                ws_pol = doc.worksheet("Policeler")
-                                ws_cari = doc.worksheet("Cari_Islemler")
-                                df_cari = get_data("Cari_Islemler")
-                                
-                                headers_pol = ws_pol.row_values(1)
-                                headers_cari = ws_cari.row_values(1)
-                                
-                                df_acenteler = get_data("Ayarlar_Acenteler")
+                                ws_pol, ws_cari = doc.worksheet("Policeler"), doc.worksheet("Cari_Islemler")
+                                df_cari = get_data("Cari_Islemler"); df_acenteler = get_data("Ayarlar_Acenteler")
+                                headers_pol, headers_cari = ws_pol.row_values(1), ws_cari.row_values(1)
                                 acente_oranlari = dict(zip(df_acenteler['Acente_Adi'], df_acenteler['Tali_Oran'])) if not df_acenteler.empty else {}
-                                
                                 cells_to_update_pol, cells_to_update_cari = [], []
                                 
                                 for idx in df_to_edit_hata.index:
-                                    old_row = df_to_edit_hata.loc[idx]
-                                    new_row = edited_hata_df.loc[idx]
-                                    
+                                    old_row, new_row = df_to_edit_hata.loc[idx], edited_hata_df.loc[idx]
                                     eski_net, yeni_net = float(sayiya_cevir(old_row["Net Prim"])), float(sayiya_cevir(new_row["Net Prim"]))
                                     eski_brut, yeni_brut = float(sayiya_cevir(old_row["Brüt Prim"])), float(sayiya_cevir(new_row["Brüt Prim"]))
                                     eski_kom, yeni_kom = float(sayiya_cevir(old_row["Şirket Komisyonu"])), float(sayiya_cevir(new_row["Şirket Komisyonu"]))
@@ -1155,51 +1061,36 @@ else:
                                         if eski_brut != yeni_brut: cells_to_update_pol.append(gspread.Cell(row=sheet_row_pol, col=headers_pol.index("Brüt Prim")+1, value=yeni_brut))
                                         if eski_kom != yeni_kom: cells_to_update_pol.append(gspread.Cell(row=sheet_row_pol, col=headers_pol.index("Şirket Komisyonu")+1, value=yeni_kom))
                                         
-                                        mus = hatali_df.loc[idx, "Müşteri Adı Soyadı"]
-                                        plk = hatali_df.loc[idx, "Plaka"]
-                                        urn = hatali_df.loc[idx, "Sigorta Türü"]
-                                        acn = hatali_df.loc[idx, "Acente"]
-                                        sir = hatali_df.loc[idx, "Sigorta Şirketi"]
-                                        
+                                        mus, plk, urn, acn, sir = hatali_df.loc[idx, "Müşteri Adı Soyadı"], hatali_df.loc[idx, "Plaka"], hatali_df.loc[idx, "Sigorta Türü"], hatali_df.loc[idx, "Acente"], hatali_df.loc[idx, "Sigorta Şirketi"]
                                         aciklama_koku = f"{sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)','')} - {urn} - Plaka: {plk}"
                                         
                                         if not df_cari.empty:
-                                            mus_cari_rows = df_cari[(df_cari["Kisi_Kurum"] == mus) & (df_cari["Islem_Turu"] == "Müşteri Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))]
-                                            for c_idx, c_row in mus_cari_rows.iterrows():
-                                                c_sheet_row = int(c_row["Sheet_Row"])
+                                            for c_idx, c_row in df_cari[(df_cari["Kisi_Kurum"] == mus) & (df_cari["Islem_Turu"] == "Müşteri Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))].iterrows():
                                                 eski_borc, eski_alacak = float(sayiya_cevir(c_row["Borc"])), float(sayiya_cevir(c_row["Alacak"]))
-                                                if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Borc")+1, value=abs(yeni_brut)))
-                                                elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Alacak")+1, value=abs(yeni_brut)))
+                                                if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Borc")+1, value=abs(yeni_brut)))
+                                                elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Alacak")+1, value=abs(yeni_brut)))
                                                     
                                             if acn != "Aktürk Sigorta (Merkez)":
-                                                t_oran = float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))
-                                                if t_oran > 1: t_oran /= 100
-                                                yeni_kazanc = yeni_kom * t_oran
-                                                acente_cari_rows = df_cari[(df_cari["Kisi_Kurum"] == acn) & (df_cari["Islem_Turu"] == "Tali Acente Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))]
-                                                for c_idx, c_row in acente_cari_rows.iterrows():
-                                                    c_sheet_row = int(c_row["Sheet_Row"])
+                                                yeni_kazanc = yeni_kom * (float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) / 100 if float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) > 1 else float(sayiya_cevir(acente_oranlari.get(acn, 0.0))))
+                                                for c_idx, c_row in df_cari[(df_cari["Kisi_Kurum"] == acn) & (df_cari["Islem_Turu"] == "Tali Acente Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))].iterrows():
                                                     eski_borc, eski_alacak = float(sayiya_cevir(c_row["Borc"])), float(sayiya_cevir(c_row["Alacak"]))
-                                                    if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Borc")+1, value=abs(yeni_kazanc)))
-                                                    elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Alacak")+1, value=abs(yeni_kazanc)))
+                                                    if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Borc")+1, value=abs(yeni_kazanc)))
+                                                    elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Alacak")+1, value=abs(yeni_kazanc)))
                                             else:
-                                                sirket_cari_rows = df_cari[(df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))]
-                                                for c_idx, c_row in sirket_cari_rows.iterrows():
-                                                    c_sheet_row = int(c_row["Sheet_Row"])
+                                                for c_idx, c_row in df_cari[(df_cari["Islem_Turu"] == "Sigorta Şirketi Carisi") & (df_cari["Islem_Detayi"].str.contains(aciklama_koku, regex=False, na=False))].iterrows():
                                                     eski_borc, eski_alacak = float(sayiya_cevir(c_row["Borc"])), float(sayiya_cevir(c_row["Alacak"]))
-                                                    if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Borc")+1, value=abs(yeni_kom)))
-                                                    elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=c_sheet_row, col=headers_cari.index("Alacak")+1, value=abs(yeni_kom)))
+                                                    if eski_borc > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Borc")+1, value=abs(yeni_kom)))
+                                                    elif eski_alacak > 0: cells_to_update_cari.append(gspread.Cell(row=int(c_row["Sheet_Row"]), col=headers_cari.index("Alacak")+1, value=abs(yeni_kom)))
 
                                 if cells_to_update_pol: ws_pol.update_cells(cells_to_update_pol, value_input_option='USER_ENTERED')
                                 if cells_to_update_cari: ws_cari.update_cells(cells_to_update_cari, value_input_option='USER_ENTERED')
                                 return bool(cells_to_update_pol or cells_to_update_cari)
-                            
-                            if api_kalkani(_hata_onar):
-                                st.success("🎉 Poliçeler ve bunlara bağlı tüm Cari hesaplar saniyeler içinde kuruşu kuruşuna onarıldı.")
-                                st.cache_data.clear(); st.rerun()
+                            if api_kalkani(_hata_onar): st.success("Onarıldı!"); st.cache_data.clear(); st.rerun()
 
     elif menu == "⚙️ Ayarlar":
         st.header("⚙️ Sistem Ayarları")
-        t1, t2, t3 = st.tabs(["📊 Ürün Oranları", "🏢 Tali Acente Oranları", "🔄 Veri Senkronizasyonu"])
+        t1, t2, t3, t4 = st.tabs(["📊 Ürün Oranları", "🏢 Tali Acente Oranları", "🔄 Veri Senk.", "📇 Hesap Planı (YENİ)"])
+        
         with t1:
             df_urun = get_data("Ayarlar_Urunler")
             if df_urun.empty: df_urun = pd.DataFrame(columns=["Urun_Adi", "Komisyon_Orani"])
@@ -1214,11 +1105,11 @@ else:
                         for r in e_urun.values.tolist(): data_to_save.append([float(sayiya_cevir(v)) if isinstance(v, (int, float, str)) and sayiya_cevir(v) != 0 else v for v in r])
                         ws_urun.append_rows(data_to_save, value_input_option='USER_ENTERED')
                         return True
-                    if api_kalkani(_urun_kaydet):
-                        st.cache_data.clear(); st.rerun()
+                    if api_kalkani(_urun_kaydet): st.cache_data.clear(); st.rerun()
+        
         with t2:
             df_acente = get_data("Ayarlar_Acenteler")
-            if df_acente.empty: df_acente = pd.DataFrame(columns=["Acente_Adi", "Tali_Oran"])
+            if df_acente.empty: df_acente = pd.DataFrame(columns=["Acente_Adi", "Tali_Oran", "Hesap_Kodu"])
             edited_acente = st.data_editor(df_acente.drop(columns=["Sheet_Row"], errors='ignore'), num_rows="dynamic", use_container_width=True)
             if st.button("💾 Acente Değişikliklerini Kaydet"):
                 with st.spinner("Kaydediliyor..."):
@@ -1227,15 +1118,15 @@ else:
                         ws_acente.clear()
                         e_acente = edited_acente.fillna("")
                         data_to_save = [e_acente.columns.values.tolist()]
-                        for r in e_acente.values.tolist(): data_to_save.append([float(sayiya_cevir(v)) if isinstance(v, (int, float, str)) and sayiya_cevir(v) != 0 else v for v in r])
+                        for r in e_acente.values.tolist(): data_to_save.append([float(sayiya_cevir(v)) if isinstance(v, (int, float, str)) and sayiya_cevir(v) != 0 and str(v).replace('.','',1).isdigit() else v for v in r])
                         ws_acente.append_rows(data_to_save, value_input_option='USER_ENTERED')
                         return True
-                    if api_kalkani(_acente_kaydet):
-                        st.cache_data.clear(); st.rerun()
+                    if api_kalkani(_acente_kaydet): st.cache_data.clear(); st.rerun()
+        
         with t3:
-            st.warning("Eksik kalan geçmiş poliçeleri Cari İşlemler tablosuna otomatik işler.")
+            st.warning("Geçmiş poliçeleri Cari İşlemler tablosuna işler.")
             if st.button("🚀 Senkronize Et"):
-                with st.spinner("Geçmiş verileriniz taranıyor... (Bu işlem biraz sürebilir)"):
+                with st.spinner("Taranıyor..."):
                     def _senk_et():
                         df_pol = get_data("Policeler"); df_cari = get_data("Cari_Islemler")
                         df_urun = get_data("Ayarlar_Urunler"); df_acente = get_data("Ayarlar_Acenteler"); df_mus = get_data("Musteriler")
@@ -1248,34 +1139,19 @@ else:
 
                         yeni_satirlar_cari = []; yeni_satirlar_mus = []
                         for index, row in df_pol.iterrows():
-                            mus = temiz_isim(str(row.get("Müşteri Adı Soyadı", ""))); tc = str(row.get("TC / VKN", "")); ilet = str(row.get("Telefon / E-mail", ""))
-                            sir = str(row.get("Sigorta Şirketi", "")); urn = str(row.get("Sigorta Türü", "")); plk = str(row.get("Plaka", ""))
-                            net = float(sayiya_cevir(row.get("Net Prim", 0))); brut = float(sayiya_cevir(row.get("Brüt Prim", 0)))
-                            kom = float(sayiya_cevir(row.get("Şirket Komisyonu", 0))); acn = str(row.get("Acente", "Aktürk Sigorta (Merkez)"))
+                            mus, tc, ilet, sir, urn, plk = temiz_isim(str(row.get("Müşteri Adı Soyadı", ""))), str(row.get("TC / VKN", "")), str(row.get("Telefon / E-mail", "")), str(row.get("Sigorta Şirketi", "")), str(row.get("Sigorta Türü", "")), str(row.get("Plaka", ""))
+                            net, brut, kom, acn = float(sayiya_cevir(row.get("Net Prim", 0))), float(sayiya_cevir(row.get("Brüt Prim", 0))), float(sayiya_cevir(row.get("Şirket Komisyonu", 0))), str(row.get("Acente", "Aktürk Sigorta (Merkez)"))
                             islem_tarihi = tarih_formatla(row.get("Tanzim Tarihi", ""))
-
-                            islem_notu = ""
-                            if "İPTAL-SATIŞ" in sir: islem_notu = "SATIŞ/TAM İPTAL İADESİ - "
-                            elif "İPTAL-ZEYL" in sir: islem_notu = "KISMİ İPTAL/ZEYL İADESİ - "
-                            elif net < 0 or brut < 0: islem_notu = "İPTAL/İADE - "
-
+                            islem_notu = "SATIŞ/TAM İPTAL İADESİ - " if "İPTAL-SATIŞ" in sir else ("KISMİ İPTAL/ZEYL İADESİ - " if "İPTAL-ZEYL" in sir else ("İPTAL/İADE - " if net < 0 or brut < 0 else ""))
                             aciklama = f"{islem_notu}{sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)','')} - {urn} - Plaka: {plk}"
 
                             if aciklama not in mevcut_cariler and f"Acente Payı Kesintisi - {aciklama}" not in mevcut_cariler and f"Şirket Komisyonu Hakediş - {aciklama}" not in mevcut_cariler:
-                                u_oran = float(sayiya_cevir(urun_oranlari.get(urn, 0.0)))
-                                if u_oran > 1: u_oran /= 100
-                                sirket_komisyonu = kom if kom != 0.0 else net * u_oran
-                                    
-                                t_oran = float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))
-                                if t_oran > 1: t_oran /= 100
-                                akturk_kazanci = float(sirket_komisyonu * t_oran)
+                                sirket_komisyonu = kom if kom != 0.0 else net * (float(sayiya_cevir(urun_oranlari.get(urn, 0.0))) / 100 if float(sayiya_cevir(urun_oranlari.get(urn, 0.0))) > 1 else float(sayiya_cevir(urun_oranlari.get(urn, 0.0))))
+                                akturk_kazanci = float(sirket_komisyonu * (float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) / 100 if float(sayiya_cevir(acente_oranlari.get(acn, 0.0))) > 1 else float(sayiya_cevir(acente_oranlari.get(acn, 0.0)))))
 
                                 yeni_satirlar_cari.append([islem_tarihi, "Müşteri Carisi", mus, aciklama, brut, 0.0, "Aktarılmış Kayıt", 1])
-                                if acn != "Aktürk Sigorta (Merkez)":
-                                    yeni_satirlar_cari.append([islem_tarihi, "Tali Acente Carisi", acn, f"Acente Payı Kesintisi - {aciklama}", akturk_kazanci, 0.0, "Aktürk Sigorta Kazancı", 1])
-                                else:
-                                    s_adi = sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)','')
-                                    yeni_satirlar_cari.append([islem_tarihi, "Sigorta Şirketi Carisi", s_adi, f"Şirket Komisyonu Hakediş - {aciklama}", sirket_komisyonu, 0.0, "Aktarılmış Kayıt", 1])
+                                if acn != "Aktürk Sigorta (Merkez)": yeni_satirlar_cari.append([islem_tarihi, "Tali Acente Carisi", acn, f"Acente Payı Kesintisi - {aciklama}", akturk_kazanci, 0.0, "Aktürk Sigorta Kazancı", 1])
+                                else: yeni_satirlar_cari.append([islem_tarihi, "Sigorta Şirketi Carisi", sir.replace(' (İPTAL-SATIŞ)','').replace(' (İPTAL-ZEYL)',''), f"Şirket Komisyonu Hakediş - {aciklama}", sirket_komisyonu, 0.0, "Aktarılmış Kayıt", 1])
                                 mevcut_cariler.append(aciklama)
 
                             if mus and mus not in mevcut_musteriler:
@@ -1286,8 +1162,69 @@ else:
                         return bool(yeni_satirlar_cari or yeni_satirlar_mus)
                         
                     sonuc = api_kalkani(_senk_et)
-                    if sonuc: st.success("🎉 Senkronizasyon başarıyla tamamlandı."); st.cache_data.clear()
-                    elif sonuc is not None: st.info("Eksik kayıt bulunamadı.")
+                    if sonuc: st.success("Tamamlandı."); st.cache_data.clear()
+
+        with t4:
+            st.markdown("### 📇 Otomatik Hesap Planı (Kalıcı Kod Sabitleme)")
+            st.info("Bu işlem, Excel sayfanızda eksik olan 'Hesap Kodu' sütunlarını otomatik açar ve tüm müşterilerinize/acentelerinize (120.XXX ve 320.XXX formunda) kalıcı numaralar atayarak kaydeder. Yeni eklenen veriler oldukça buraya gelip butona basabilirsiniz.")
+            
+            if st.button("🚀 Hesap Planını Oluştur / Kodları Sabitle", type="primary"):
+                with st.spinner("Google Sheets taranıyor ve eksik hesap kodları işleniyor..."):
+                    def _hesap_plani_olustur():
+                        doc = client.open_by_key(SHEET_ID)
+                        
+                        # 1. Müşteriler İçin (120.XXX)
+                        ws_mus = doc.worksheet("Musteriler")
+                        mus_data = ws_mus.get_all_values()
+                        if mus_data:
+                            headers = mus_data[0]
+                            if "Hesap_Kodu" not in headers:
+                                ws_mus.update_cell(1, len(headers)+1, "Hesap_Kodu")
+                                headers.append("Hesap_Kodu")
+                            
+                            hk_idx = headers.index("Hesap_Kodu")
+                            mevcut_kodlar = [row[hk_idx] for row in mus_data[1:] if len(row) > hk_idx and row[hk_idx].startswith("120.")]
+                            max_kod = 0
+                            for k in mevcut_kodlar:
+                                try: max_kod = max(max_kod, int(k.split(".")[-1]))
+                                except: pass
+                            
+                            updates = []
+                            for i, row in enumerate(mus_data[1:]):
+                                if len(row) <= hk_idx or not str(row[hk_idx]).startswith("120."):
+                                    max_kod += 1
+                                    updates.append(gspread.Cell(row=i+2, col=hk_idx+1, value=f"120.{str(max_kod).zfill(3)}"))
+                            if updates: ws_mus.update_cells(updates)
+                        
+                        # 2. Acenteler İçin (320.T.XXX)
+                        ws_acn = doc.worksheet("Ayarlar_Acenteler")
+                        acn_data = ws_acn.get_all_values()
+                        if acn_data:
+                            headers = acn_data[0]
+                            if "Hesap_Kodu" not in headers:
+                                ws_acn.update_cell(1, len(headers)+1, "Hesap_Kodu")
+                                headers.append("Hesap_Kodu")
+                            
+                            hk_idx = headers.index("Hesap_Kodu")
+                            mevcut_kodlar = [row[hk_idx] for row in acn_data[1:] if len(row) > hk_idx and row[hk_idx].startswith("320.T.")]
+                            max_kod = 0
+                            for k in mevcut_kodlar:
+                                try: max_kod = max(max_kod, int(k.split(".")[-1]))
+                                except: pass
+                            
+                            updates = []
+                            for i, row in enumerate(acn_data[1:]):
+                                if len(row) <= hk_idx or not str(row[hk_idx]).startswith("320.T."):
+                                    max_kod += 1
+                                    updates.append(gspread.Cell(row=i+2, col=hk_idx+1, value=f"320.T.{str(max_kod).zfill(3)}"))
+                            if updates: ws_acn.update_cells(updates)
+                        
+                        return True
+                    
+                    if api_kalkani(_hesap_plani_olustur):
+                        st.success("🎉 Müşteri ve Tali Acente hesap kodları Google Sheets'e kalıcı olarak işlendi!")
+                        st.cache_data.clear()
+                        st.rerun()
 
     elif menu == "🔍 Tüm Arşiv":
         st.header("📂 Tüm Poliçe Arşivi")
