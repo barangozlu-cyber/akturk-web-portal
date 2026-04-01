@@ -19,15 +19,40 @@ import time
 import random
 
 # ==========================================
-# 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
+# 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI - v9.62 (MENÜ FIX)
 # ==========================================
 st.set_page_config(page_title="Aktürk ERP v9.61", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
 #MainMenu {visibility: hidden;}
-header {visibility: hidden;}    
-footer {visibility: hidden;}    
+footer {visibility: hidden;}
+
+/* --- MENÜ BUTONU VE HEADER DÜZENLEME --- */
+/* Üst barı şeffaf yapıyoruz ama tamamen gizlemiyoruz ki buton tıklanabilsin */
+header[data-testid="stHeader"] {
+    background-color: rgba(0,0,0,0) !important;
+    color: transparent !important;
+    height: 3rem !important;
+}
+
+/* Menü açma/kapama butonunu cımbızla çekip Aktürk Mavisi yapıyoruz */
+button[data-testid="stSidebarCollapseButton"] {
+    visibility: visible !important;
+    background-color: #1D4ED8 !important; /* Premium Mavi */
+    color: white !important;
+    border-radius: 50% !important;
+    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.4) !important;
+    margin: 8px !important;
+    transition: all 0.3s ease !important;
+}
+
+button[data-testid="stSidebarCollapseButton"]:hover {
+    transform: scale(1.1);
+    background-color: #1E3A8A !important;
+}
+/* --------------------------------------- */
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 .stApp { background-color: #F0F2F5 !important; color: #1E293B !important; }
