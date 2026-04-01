@@ -25,56 +25,67 @@ st.set_page_config(page_title="Aktürk ERP v9.61", page_icon="🛡️", layout="
 
 gizleme_kodu = """
 <style>
+/* 1. Menü ve Header'ı öldürmeden şeffaflaştırıyoruz */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
-/* --- AKILLI MENÜ BUTONU VE TOOLTIP DÜZENLEME --- */
 header[data-testid="stHeader"] {
     background-color: rgba(0,0,0,0) !important;
-    color: transparent !important;
+    visibility: visible !important; /* Gizli değil, sadece şeffaf */
 }
 
+/* 2. Butonun ana gövdesini Aktürk Mavisi yapıyoruz */
 button[data-testid="stSidebarCollapseButton"] {
-    visibility: visible !important;
-    background-color: #1D4ED8 !important; /* Belirgin Aktürk Mavisi */
-    color: white !important;
-    border-radius: 10px !important;
-    box-shadow: 0 4px 10px rgba(29, 78, 216, 0.4) !important;
-    margin: 10px !important;
-    border: 1px solid #1E3A8A !important;
+    background-color: #1D4ED8 !important; 
+    border: 2px solid #1E3A8A !important;
+    border-radius: 8px !important;
+    width: 45px !important;
+    height: 45px !important;
     transition: all 0.3s ease !important;
+    box-shadow: 0 4px 15px rgba(29, 78, 216, 0.4) !important;
 }
 
-/* Üstüne gelince parlasın */
+/* 3. İŞTE BURASI ÖNEMLİ: İçindeki ok işaretini beyaza boyuyoruz */
+button[data-testid="stSidebarCollapseButton"] svg {
+    fill: white !important;
+    color: white !important;
+}
+
+/* 4. Mouse üstüne gelince butonun tepkisi */
 button[data-testid="stSidebarCollapseButton"]:hover {
     background-color: #1E3A8A !important;
     transform: scale(1.1);
 }
 
-/* TOOLTIP (BİLGİLENDİRME YAZISI) */
+/* 5. Tooltip (Bilgilendirme Yazısı) */
 button[data-testid="stSidebarCollapseButton"]:hover::after {
     position: absolute;
-    left: 50px;
-    top: 5px;
-    background-color: #334155;
+    left: 55px;
+    top: 8px;
+    background-color: #0F172A;
     color: white;
-    padding: 5px 12px;
-    border-radius: 6px;
-    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 14px;
     font-weight: 600;
     white-space: nowrap;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    z-index: 99999;
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
+    z-index: 999999;
 }
 
-/* Menü açıkken ve kapalıyken farklı yazı yazsın */
+/* Menü durumuna göre otomatik metin */
 button[data-testid="stSidebarCollapseButton"][aria-expanded="true"]:hover::after {
     content: "⬅️ Menü Daralt";
 }
 button[data-testid="stSidebarCollapseButton"][aria-expanded="false"]:hover::after {
     content: "➡️ Menü Aç";
 }
-/* --------------------------------------- */
+
+/* Font ayarları */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
+</style>
+"""
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
