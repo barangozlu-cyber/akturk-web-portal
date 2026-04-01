@@ -19,61 +19,61 @@ import time
 import random
 
 # ==========================================
-# 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI - v9.62 (AKILLI MENÜ)
+# 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI - v9.62 (FULL ENTEGRE)
 # ==========================================
 st.set_page_config(page_title="Aktürk ERP v9.61", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
-/* 1. Menü ve Header'ı öldürmeden şeffaflaştırıyoruz */
+/* 1. ANA MENÜ VE HEADER DÜZENİ */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
 header[data-testid="stHeader"] {
     background-color: rgba(0,0,0,0) !important;
-    visibility: visible !important; /* Gizli değil, sadece şeffaf */
+    visibility: visible !important;
 }
 
-/* 2. Butonun ana gövdesini Aktürk Mavisi yapıyoruz */
+/* 2. AKILLI MENÜ AÇMA/KAPATMA BUTONU */
 button[data-testid="stSidebarCollapseButton"] {
-    background-color: #1D4ED8 !important; 
+    background-color: #1D4ED8 !important; /* Aktürk Mavisi */
+    color: white !important;
     border: 2px solid #1E3A8A !important;
-    border-radius: 8px !important;
+    border-radius: 10px !important;
     width: 45px !important;
     height: 45px !important;
     transition: all 0.3s ease !important;
     box-shadow: 0 4px 15px rgba(29, 78, 216, 0.4) !important;
+    margin: 10px !important;
+    z-index: 999999;
 }
 
-/* 3. İŞTE BURASI ÖNEMLİ: İçindeki ok işaretini beyaza boyuyoruz */
 button[data-testid="stSidebarCollapseButton"] svg {
     fill: white !important;
     color: white !important;
 }
 
-/* 4. Mouse üstüne gelince butonun tepkisi */
 button[data-testid="stSidebarCollapseButton"]:hover {
     background-color: #1E3A8A !important;
     transform: scale(1.1);
 }
 
-/* 5. Tooltip (Bilgilendirme Yazısı) */
+/* TOOLTIP (BİLGİLENDİRME YAZILARI) */
 button[data-testid="stSidebarCollapseButton"]:hover::after {
     position: absolute;
     left: 55px;
-    top: 8px;
+    top: 10px;
     background-color: #0F172A;
     color: white;
     padding: 6px 12px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
     z-index: 999999;
 }
 
-/* Menü durumuna göre otomatik metin */
 button[data-testid="stSidebarCollapseButton"][aria-expanded="true"]:hover::after {
     content: "⬅️ Menü Daralt";
 }
@@ -81,49 +81,58 @@ button[data-testid="stSidebarCollapseButton"][aria-expanded="false"]:hover::afte
     content: "➡️ Menü Aç";
 }
 
-/* Font ayarları */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-</style>
-"""
-
+/* 3. GENEL TEMA VE GÖRSEL TASARIM */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
 .stApp { background-color: #F0F2F5 !important; color: #1E293B !important; }
+
 h1, h2, h3, h4 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.5px; }
-input, textarea, .stTextInput input, .stTextArea textarea, .stNumberInput input { caret-color: #2563EB !important; color: #0F172A !important; font-weight: 600 !important; }
-label, div[data-testid="stWidgetLabel"] > div > p { color: #0F172A !important; font-weight: 700 !important; font-size: 14px !important; }
-.stRadio div[role="radiogroup"] label p, .stCheckbox label p { color: #1E293B !important; font-weight: 600 !important; }
-.stSelectbox>div>div>div { color: #0F172A !important; font-weight: 600 !important; }
 p { color: #334155 !important; }
+
+/* INPUT VE TABLAR */
 .stTabs [data-baseweb="tab-list"] { background-color: transparent; border-bottom: 2px solid #E2E8F0; gap: 20px; }
-.stTabs [data-baseweb="tab"] { background-color: transparent !important; border: none !important; padding: 10px 4px !important; }
-.stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 700 !important; font-size: 14px !important; }
+.stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 700 !important; }
 .stTabs [aria-selected="true"] p { color: #1D4ED8 !important; font-weight: 800 !important; }
-.stTabs [aria-selected="true"] { border-bottom: 3px solid #2563EB !important; }
-[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0 !important; box-shadow: 2px 0 10px rgba(0,0,0,0.02); }
-[data-testid="stSidebar"] hr { border-color: #E2E8F0 !important; margin: 15px 0; }
-[data-testid="stSidebar"] div[data-baseweb="radio"] > div:first-child { display: none !important; }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label { padding: 12px 16px !important; margin-bottom: 6px !important; border-radius: 8px !important; transition: all 0.2s ease-in-out !important; cursor: pointer !important; width: 100% !important; border: 1px solid transparent; }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label p { color: #475569 !important; margin: 0 !important; font-weight: 600 !important; font-size: 15px !important;}
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover { background-color: #F8FAFC !important; border: 1px solid #E2E8F0; transform: translateX(4px); }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"], [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) { background: linear-gradient(90deg, #EFF6FF 0%, #FFFFFF 100%) !important; border-left: 4px solid #2563EB !important; border-top: 1px solid #E2E8F0; border-bottom: 1px solid #E2E8F0; border-right: 1px solid #E2E8F0; }
-[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label[data-checked="true"] p, [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p { color: #1D4ED8 !important; font-weight: 800 !important; }
-div[data-testid="stMetric"] { background-color: #FFFFFF !important; border-radius: 12px !important; padding: 20px !important; border: 1px solid #E2E8F0 !important; border-left: 5px solid #2563EB !important; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important; transition: transform 0.2s ease; }
-div[data-testid="stMetric"]:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08); }
-div[data-testid="stMetricValue"] { color: #0F172A !important; font-weight: 800 !important; font-size: 28px !important; }
-div[data-testid="stMetricLabel"] { color: #64748B !important; font-size: 14px !important; font-weight: 700 !important; text-transform: uppercase; letter-spacing: 0.5px; }
-div[data-baseweb="select"] > div, div[data-baseweb="input"] > div, textarea { background-color: #FFFFFF !important; border: 1px solid #CBD5E1 !important; border-radius: 8px !important; transition: all 0.2s ease; }
-div[data-baseweb="select"] > div:hover, div[data-baseweb="input"] > div:hover { border-color: #94A3B8 !important; }
-.stButton>button[kind="primary"] { background: linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%) !important; color: #FFFFFF !important; font-weight: 600 !important; font-size: 15px !important; border-radius: 8px !important; border: none !important; padding: 10px 24px !important; box-shadow: 0 4px 12px rgba(29, 78, 216, 0.3) !important; transition: all 0.3s ease !important; }
-.stButton>button[kind="primary"]:hover { transform: translateY(-2px); box-shadow: 0 8px 16px rgba(29, 78, 216, 0.4) !important; }
-.stButton>button[kind="secondary"] { background-color: #FFFFFF !important; color: #334155 !important; font-weight: 600 !important; border-radius: 8px !important; border: 1px solid #CBD5E1 !important; padding: 10px 24px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; transition: all 0.2s ease !important; }
-.stButton>button[kind="secondary"]:hover { background-color: #F8FAFC !important; border-color: #94A3B8 !important; }
-div[data-testid="stForm"] { background-color: #FFFFFF; padding: 30px; border-radius: 12px; border: 1px solid #E2E8F0; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); }
-.login-box { background-color: #FFFFFF; padding: 40px; border-radius: 16px; border: 1px solid #E2E8F0; text-align: center; max-width: 420px; margin: auto; margin-top: 8vh; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05); }
-[data-testid="stDataEditor"] textarea, [data-testid="stDataEditor"] input, .glide-data-grid textarea, .gdg-input { background-color: #FFFFFF !important; color: #1E293B !important; font-weight: 600 !important; }
+
+/* SIDEBAR (SOL MENÜ) TASARIMI */
+[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0 !important; }
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
+    padding: 12px 16px !important;
+    margin-bottom: 6px !important;
+    border-radius: 8px !important;
+    border: 1px solid transparent;
+    transition: all 0.2s ease !important;
+}
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
+    background-color: #F8FAFC !important;
+    transform: translateX(4px);
+}
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
+    background: linear-gradient(90deg, #EFF6FF 0%, #FFFFFF 100%) !important;
+    border-left: 4px solid #2563EB !important;
+    border-top: 1px solid #E2E8F0;
+    border-bottom: 1px solid #E2E8F0;
+    border-right: 1px solid #E2E8F0;
+}
+
+/* METRİKLER (KUTUCUKLAR) */
+div[data-testid="stMetric"] {
+    background-color: #FFFFFF !important;
+    border-radius: 12px !important;
+    padding: 20px !important;
+    border: 1px solid #E2E8F0 !important;
+    border-left: 5px solid #2563EB !important;
+}
+
+/* BUTONLAR */
+.stButton>button[kind="primary"] {
+    background: linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%) !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.3) !important;
+}
 </style>
 """
+
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
 
 # ==========================================
