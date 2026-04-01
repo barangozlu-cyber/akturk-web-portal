@@ -987,25 +987,32 @@ else:
         st.divider()
 
         if not df_pol.empty and "Bitiş Tarihi" in df_pol.columns:
-            # 1. Bitiş tarihini gerçek tarih objesine çeviriyoruz
+            # 1. Bitiş tarihlerini algıla
             df_pol['Bit_Obj'] = pd.to_datetime(df_pol['Bitiş Tarihi'], dayfirst=True, errors='coerce')
+            df_gecerli = df_pol.dropna(subset=['Bit_Obj']).copy()
             
-            # 2. Taramayı SADECE Bitiş Tarihi üzerinden yapıyoruz
-            takvim_temel = df_pol[(df_pol['Bit_Obj'].dt.date >= takvim_basla) & (df_pol['Bit_Obj'].dt.date <= takvim_bitis)].copy()
-            takvim_temel = takvim_temel[~takvim_temel["Sigorta Şirketi"].str.contains("İPTAL", na=False)]
+            # --- ZEKİ MOTOR 1: OTOMATİK DÜŞME ---
+            # Sadece en güncel poliçeleri tutar. Yeni poliçe kesilince eskisi takvimden uçar.
+            df_gecerli["Anahtar"] = df_gecerli["Plaka"].astype(str).str.strip() + "_" + df_gecerli["Müşteri Adı Soyadı"].astype(str).str.strip() + "_" + df_gecerli["Sigorta Türü"].astype(str).str.strip()
+            idx_guncel = df_gecerli.groupby("Anahtar")["Bit_Obj"].idxmax()
+            en_guncel_policeler = df_gecerli.loc[idx_guncel].copy()
+            
+            # İptal edilmiş veya manuel düşürülmüşleri çıkar
+            takvim_temel = en_guncel_policeler[~en_guncel_policeler["Sigorta Şirketi"].str.contains("İPTAL", na=False)]
             takvim_temel = takvim_temel[takvim_temel["Başlangıç Tarihi"] != takvim_temel["Bitiş Tarihi"]]
 
+            # Satış/İptal plakalarını tamamen temizle
             iptal_df = df_pol[df_pol["Sigorta Şirketi"].str.contains("İPTAL-SATIŞ", na=False)]
             iptal_plakalar = iptal_df[iptal_df["Plaka"] != ""]["Plaka"].unique()
             iptal_musteriler = iptal_df[iptal_df["Plaka"] == ""]["Müşteri Adı Soyadı"].unique()
-            
             takvim_temel = takvim_temel[~takvim_temel["Plaka"].isin(iptal_plakalar)]
             takvim_temel = takvim_temel[~((takvim_temel["Plaka"] == "") & (takvim_temel["Müşteri Adı Soyadı"].isin(iptal_musteriler)))]
             
-            # 3. Kalan günü bilgilendirme amaçlı hesaplıyoruz
-            takvim_temel["Kalan Gün"] = (takvim_temel['Bit_Obj'].dt.normalize() - pd.Timestamp.today().normalize()).dt.days
+            # 2. Seçili tarihi filtrele
+            takvim_temel = takvim_temel[(takvim_temel['Bit_Obj'].dt.date >= takvim_basla) & (takvim_temel['Bit_Obj'].dt.date <= takvim_bitis)].copy()
             
-            # 4. KESİN SIRALAMA: Doğrudan kronolojik Bitiş Tarihine göre (Yakından -> Uzağa)
+            # 3. Kalan günü hesapla ve sırala
+            takvim_temel["Kalan Gün"] = (takvim_temel['Bit_Obj'].dt.normalize() - pd.Timestamp.today().normalize()).dt.days
             takvim = takvim_temel.sort_values("Bit_Obj", ascending=True)
             
             if not takvim.empty:
@@ -1016,14 +1023,42 @@ else:
                     return "🟢 SÜRESİ VAR"
                 takvim["DURUM"] = takvim["Kalan Gün"].apply(uyari)
                 
-                # Tabloda Bitiş Tarihini daha öne aldık
                 gosterim = ["DURUM", "Bitiş Tarihi", "Kalan Gün", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Sigorta Şirketi", "Telefon / E-mail"]
                 if "PDF Linki" in takvim.columns: gosterim.append("PDF Linki")
                 
                 st.dataframe(df_gorsel_yap(takvim, [])[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
                 excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi", help_text="Bu listeyi Excel olarak bilgisayarınıza kaydeder.")
-            else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
-
+                
+                st.divider()
+                # --- ZEKİ MOTOR 2: MANUEL DÜŞÜRME (YENİLENMEYECEK SEÇİMİ) ---
+                st.markdown("### 🚫 Müşteri Yenilemedi / Takvimden Düşür")
+                st.info("Müşteri yenilemekten vazgeçtiyse, o poliçeyi takvimden kalıcı olarak gizleyebilirsiniz (Mali geçmiş bozulmaz).")
+                
+                takvim["Ozet_Secim"] = takvim["Müşteri Adı Soyadı"] + " | " + takvim["Plaka"] + " | " + takvim["Sigorta Türü"] + " | Bitiş: " + takvim["Bitiş Tarihi"] + " (Satır:" + takvim["Sheet_Row"].astype(str) + ")"
+                secilen_dusur = st.selectbox("Takvimden Çıkarılacak Poliçeyi Seçin:", ["Seçiniz..."] + takvim["Ozet_Secim"].tolist())
+                
+                if secilen_dusur != "Seçiniz...":
+                    if st.button("🗑️ Seçili Poliçeyi Takvimden Kalıcı Düşür", type="primary"):
+                        with st.spinner("Takvimden düşürülüyor..."):
+                            def _yenilenmeyecek_isaretle():
+                                satir_no = int(re.search(r'\(Satır:(\d+)\)', secilen_dusur).group(1))
+                                doc = client.open_by_key(SHEET_ID)
+                                ws_pol = doc.worksheet("Policeler")
+                                p_headers = ws_pol.row_values(1)
+                                
+                                sirket_idx = p_headers.index("Sigorta Şirketi") + 1
+                                current_sirket = ws_pol.cell(satir_no, sirket_idx).value
+                                # Akıllı iptal etiketi ekleniyor (Cari mutabakatı bozmayan özel bir etiket)
+                                ws_pol.update_cell(satir_no, sirket_idx, f"{current_sirket} (İPTAL-YENİLENMEDİ)")
+                                return True
+                            
+                            if api_kalkani(_yenilenmeyecek_isaretle):
+                                st.success("Poliçe başarıyla takvimden düşürüldü!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+            else: 
+                st.info("Bu tarihler arasında süresi dolacak veya henüz yenilenmemiş poliçe bulunmuyor.")
     elif menu == "🔎 Akıllı Arama":
         st.header("🔎 Akıllı & Bağlamlı Arama")
         df_pol = get_data("Policeler")
