@@ -982,12 +982,15 @@ else:
         st.header("📅 Yenileme Takibi")
         df_pol = get_data("Policeler")
         t_col1, t_col2 = st.columns(2)
-        takvim_basla = t_col1.date_input("Takvim Başlangıç", datetime.today())
-        takvim_bitis = t_col2.date_input("Takvim Bitiş", datetime.today() + timedelta(days=30))
+        takvim_basla = t_col1.date_input("Takvim Başlangıç (Bitiş Tarihine Göre)", datetime.today())
+        takvim_bitis = t_col2.date_input("Takvim Bitiş (Bitiş Tarihine Göre)", datetime.today() + timedelta(days=30))
         st.divider()
 
         if not df_pol.empty and "Bitiş Tarihi" in df_pol.columns:
+            # 1. Bitiş tarihini gerçek tarih objesine çeviriyoruz
             df_pol['Bit_Obj'] = pd.to_datetime(df_pol['Bitiş Tarihi'], dayfirst=True, errors='coerce')
+            
+            # 2. Taramayı SADECE Bitiş Tarihi üzerinden yapıyoruz
             takvim_temel = df_pol[(df_pol['Bit_Obj'].dt.date >= takvim_basla) & (df_pol['Bit_Obj'].dt.date <= takvim_bitis)].copy()
             takvim_temel = takvim_temel[~takvim_temel["Sigorta Şirketi"].str.contains("İPTAL", na=False)]
             takvim_temel = takvim_temel[takvim_temel["Başlangıç Tarihi"] != takvim_temel["Bitiş Tarihi"]]
@@ -998,8 +1001,12 @@ else:
             
             takvim_temel = takvim_temel[~takvim_temel["Plaka"].isin(iptal_plakalar)]
             takvim_temel = takvim_temel[~((takvim_temel["Plaka"] == "") & (takvim_temel["Müşteri Adı Soyadı"].isin(iptal_musteriler)))]
+            
+            # 3. Kalan günü bilgilendirme amaçlı hesaplıyoruz
             takvim_temel["Kalan Gün"] = (takvim_temel['Bit_Obj'].dt.normalize() - pd.Timestamp.today().normalize()).dt.days
-            takvim = takvim_temel.sort_values("Kalan Gün")
+            
+            # 4. KESİN SIRALAMA: Doğrudan kronolojik Bitiş Tarihine göre (Yakından -> Uzağa)
+            takvim = takvim_temel.sort_values("Bit_Obj", ascending=True)
             
             if not takvim.empty:
                 def uyari(gun):
@@ -1008,8 +1015,11 @@ else:
                     if gun <= 30: return "🟡 YAKLAŞIYOR"
                     return "🟢 SÜRESİ VAR"
                 takvim["DURUM"] = takvim["Kalan Gün"].apply(uyari)
-                gosterim = ["DURUM", "Kalan Gün", "Bitiş Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Sigorta Şirketi", "Telefon / E-mail"]
+                
+                # Tabloda Bitiş Tarihini daha öne aldık
+                gosterim = ["DURUM", "Bitiş Tarihi", "Kalan Gün", "Müşteri Adı Soyadı", "Plaka", "Sigorta Türü", "Sigorta Şirketi", "Telefon / E-mail"]
                 if "PDF Linki" in takvim.columns: gosterim.append("PDF Linki")
+                
                 st.dataframe(df_gorsel_yap(takvim, [])[gosterim], column_config=STIL_AYARLARI, use_container_width=True)
                 excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi", help_text="Bu listeyi Excel olarak bilgisayarınıza kaydeder.")
             else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
