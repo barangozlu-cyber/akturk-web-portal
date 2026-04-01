@@ -19,7 +19,7 @@ import time
 import random
 
 # ==========================================
-# 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI - v9.62 (MENÜ FIX)
+# 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI - v9.62 (AKILLI MENÜ)
 # ==========================================
 st.set_page_config(page_title="Aktürk ERP v9.61", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
@@ -28,28 +28,51 @@ gizleme_kodu = """
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 
-/* --- MENÜ BUTONU VE HEADER DÜZENLEME --- */
-/* Üst barı şeffaf yapıyoruz ama tamamen gizlemiyoruz ki buton tıklanabilsin */
+/* --- AKILLI MENÜ BUTONU VE TOOLTIP DÜZENLEME --- */
 header[data-testid="stHeader"] {
     background-color: rgba(0,0,0,0) !important;
     color: transparent !important;
-    height: 3rem !important;
 }
 
-/* Menü açma/kapama butonunu cımbızla çekip Aktürk Mavisi yapıyoruz */
 button[data-testid="stSidebarCollapseButton"] {
     visibility: visible !important;
-    background-color: #1D4ED8 !important; /* Premium Mavi */
+    background-color: #1D4ED8 !important; /* Belirgin Aktürk Mavisi */
     color: white !important;
-    border-radius: 50% !important;
-    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.4) !important;
-    margin: 8px !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 10px rgba(29, 78, 216, 0.4) !important;
+    margin: 10px !important;
+    border: 1px solid #1E3A8A !important;
     transition: all 0.3s ease !important;
 }
 
+/* Üstüne gelince parlasın */
 button[data-testid="stSidebarCollapseButton"]:hover {
-    transform: scale(1.1);
     background-color: #1E3A8A !important;
+    transform: scale(1.1);
+}
+
+/* TOOLTIP (BİLGİLENDİRME YAZISI) */
+button[data-testid="stSidebarCollapseButton"]:hover::after {
+    position: absolute;
+    left: 50px;
+    top: 5px;
+    background-color: #334155;
+    color: white;
+    padding: 5px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    z-index: 99999;
+}
+
+/* Menü açıkken ve kapalıyken farklı yazı yazsın */
+button[data-testid="stSidebarCollapseButton"][aria-expanded="true"]:hover::after {
+    content: "⬅️ Menü Daralt";
+}
+button[data-testid="stSidebarCollapseButton"][aria-expanded="false"]:hover::after {
+    content: "➡️ Menü Aç";
 }
 /* --------------------------------------- */
 
