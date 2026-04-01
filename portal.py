@@ -1046,7 +1046,7 @@ else:
                     if api_kalkani(_not_ekle): st.success("Poliçe takvimden kaldırıldı!"); st.cache_data.clear(); st.rerun()
                 
                 st.divider()
-                excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi", help="Bu tabloyu olduğu gibi bilgisayarına kaydeder.")
+                excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi", help_text="Bu tabloyu olduğu gibi bilgisayarına kaydeder.")
             else: st.info("Bu tarihler arasında süresi dolacak poliçe bulunmuyor.")
 
     elif menu == "🔎 Akıllı Arama":
@@ -1460,7 +1460,7 @@ else:
             df_ui_arsiv = df_gorsel_yap(df_pol, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])
             st.dataframe(df_ui_arsiv[[c for c in df_ui_arsiv.columns if c != "Sheet_Row"]], column_config=STIL_AYARLARI, use_container_width=True)
             st.divider()
-            excel_indir(df_pol, "Tüm Arşivi Excel Olarak İndir", "Tum_Police_Arsivi", help="Veritabanındaki tüm geçmişi indirir.")
+            excel_indir(df_pol, "Tüm Arşivi Excel Olarak İndir", "Tum_Police_Arsivi", help_text="Veritabanındaki tüm geçmişi indirir.")
 
     st.sidebar.divider()
     if st.sidebar.button("🚪 Güvenli Çıkış", type="secondary"): st.session_state["giris_yapildi"] = False; st.rerun()
