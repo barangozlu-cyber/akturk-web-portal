@@ -1095,7 +1095,7 @@ else:
 
     elif menu == "🛠️ Kayıt Onarım & Silme":
         st.header("🛠️ Sistem Kayıt Yönetimi")
-        t1, t2, t3, t4, t5, t6 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "📝 Fiş No İle Sil / Düzenle", "🚑 Rakam/Cari Onar", "🔄 İsim / Kurum Birleştir"])
+        t1, t2, t3, t4, t5, t6, t7 = st.tabs(["👤 Müşteri Bilgisi Düzelt", "🗑️ Müşteriyi Tamamen Sil", "🗑️ Poliçe Sil", "📝 Fiş No İle Sil / Düzenle", "🚑 Rakam/Cari Onar", "🔄 İsim / Kurum Birleştir", "🧹 Bakiye Sıfırlama"])
         
         with t1:
             df_mus = get_data("Musteriler")
@@ -1346,6 +1346,90 @@ else:
                             return True
                         if api_kalkani(_toplu_degistir): st.success("🎉 Başarıyla birleştirildi!"); st.cache_data.clear(); time.sleep(1); st.rerun()
 
+        with t7:
+            st.markdown("### 🧹 Müşteri Carisi Toplu veya Seçmeli Sıfırlama")
+            st.info("💡 **Muhasebe Mantığı:** Geçmiş poliçeler ve finansal hareketler silinmez (geçmişiniz bozulmaz). Sadece güncel bakiyeyi 0,00 TL yapacak tutarda otomatik bir **'Kayıt Düzeltme (Sıfırlama) Fişi'** kesilir.")
+            
+            df_cari_sifir = get_data("Cari_Islemler")
+            if not df_cari_sifir.empty and "Kisi_Kurum" in df_cari_sifir.columns:
+                m_cariler = df_cari_sifir[df_cari_sifir["Islem_Turu"] == "Müşteri Carisi"].copy()
+                m_cariler["Borc"] = m_cariler["Borc"].apply(sayiya_cevir)
+                m_cariler["Alacak"] = m_cariler["Alacak"].apply(sayiya_cevir)
+                
+                bakiye_df = m_cariler.groupby("Kisi_Kurum")[["Borc", "Alacak"]].sum().reset_index()
+                bakiye_df["Bakiye"] = bakiye_df["Borc"] - bakiye_df["Alacak"]
+                # Sadece bakiyesi 0 olmayanları filtrele (Küsurat hatalarına karşı 0.01 hassasiyeti)
+                bakiye_df = bakiye_df[abs(bakiye_df["Bakiye"]) > 0.01] 
+                
+                sifirlama_tipi = st.radio("Sıfırlama Yöntemi:", ["🎯 Tek Bir Müşteriyi Seçerek Sıfırla", "💥 TÜM MÜŞTERİLERİ Toplu Sıfırla (DİKKAT)"], horizontal=True)
+                st.divider()
+                
+                if sifirlama_tipi == "🎯 Tek Bir Müşteriyi Seçerek Sıfırla":
+                    if not bakiye_df.empty:
+                        secilen_mus_sifirla = st.selectbox("Sıfırlanacak Müşteriyi Seçin (Sadece bakiyesi olanlar listelenir):", ["Seçiniz..."] + sorted(bakiye_df["Kisi_Kurum"].tolist()))
+                        
+                        if secilen_mus_sifirla != "Seçiniz...":
+                            mus_bakiye = float(bakiye_df[bakiye_df["Kisi_Kurum"] == secilen_mus_sifirla].iloc[0]["Bakiye"])
+                            if mus_bakiye > 0: st.error(f"🚨 Bu müşterinin size **{para_format(mus_bakiye)}** borcu var.")
+                            else: st.success(f"✅ Sizin bu müşteriye **{para_format(abs(mus_bakiye))}** borcunuz var.")
+                            
+                            if st.button(f"🧹 {secilen_mus_sifirla} Bakiyesini Sıfırla", type="primary"):
+                                with st.spinner("Sıfırlama fişi kesiliyor..."):
+                                    def _tek_sifirla():
+                                        doc = client.open_by_key(SHEET_ID)
+                                        ws_cari = doc.worksheet("Cari_Islemler")
+                                        c_headers = ws_cari.row_values(1)
+                                        
+                                        tarih = datetime.today().strftime("%d.%m.%Y")
+                                        borc_yaz = abs(mus_bakiye) if mus_bakiye < 0 else 0.0
+                                        alacak_yaz = abs(mus_bakiye) if mus_bakiye > 0 else 0.0
+                                        
+                                        satir = [""] * len(c_headers)
+                                        mapping = {"Tarih": tarih, "Islem_Turu": "Müşteri Carisi", "Kisi_Kurum": secilen_mus_sifirla, "Islem_Detayi": "Sistem İçi Bakiye Sıfırlama / Düzeltme İşlemi", "Borc": borc_yaz, "Alacak": alacak_yaz, "Odeme_Tipi": "Kayıt Düzeltme", "Taksit": 1, "Fiş No": fis_no_uret("SFR")}
+                                        for key, val in mapping.items():
+                                            if key in c_headers: satir[c_headers.index(key)] = val
+                                        
+                                        ws_cari.append_row(satir, value_input_option='USER_ENTERED')
+                                        return True
+                                    
+                                    if api_kalkani(_tek_sifirla): st.success("Başarıyla sıfırlandı!"); st.cache_data.clear(); time.sleep(1); st.rerun()
+                    else:
+                        st.info("🎉 Sistemde bakiyesi olan hiçbir müşteri bulunmuyor. Herkesin hesabı 0,00 TL.")
+                
+                elif sifirlama_tipi == "💥 TÜM MÜŞTERİLERİ Toplu Sıfırla (DİKKAT)":
+                    if not bakiye_df.empty:
+                        st.error(f"⚠️ DİKKAT: Bu işlem, sistemdeki bakiyesi sıfır olmayan **{len(bakiye_df)} müşterinin** tamamına otomatik sıfırlama fişi keser. Tüm müşteri bakiyeleriniz anında 0,00 TL olur.")
+                        onay = st.checkbox("Evet, tüm müşteri bakiyelerinin kalıcı olarak 0,00 TL olmasını onaylıyorum.")
+                        
+                        if onay:
+                            if st.button("💥 TÜM MÜŞTERİLERİ TEK TUŞLA SIFIRLA", type="primary"):
+                                with st.spinner("Tüm müşteriler için sıfırlama işlemi yapılıyor (Biraz sürebilir)..."):
+                                    def _toplu_sifirla():
+                                        doc = client.open_by_key(SHEET_ID)
+                                        ws_cari = doc.worksheet("Cari_Islemler")
+                                        c_headers = ws_cari.row_values(1)
+                                        tarih = datetime.today().strftime("%d.%m.%Y")
+                                        yeni_satirlar = []
+                                        
+                                        for index, row in bakiye_df.iterrows():
+                                            m_ad = row["Kisi_Kurum"]
+                                            m_bak = float(row["Bakiye"])
+                                            
+                                            borc_yaz = abs(m_bak) if m_bak < 0 else 0.0
+                                            alacak_yaz = abs(m_bak) if m_bak > 0 else 0.0
+                                            
+                                            satir = [""] * len(c_headers)
+                                            mapping = {"Tarih": tarih, "Islem_Turu": "Müşteri Carisi", "Kisi_Kurum": m_ad, "Islem_Detayi": "Sistem İçi Toplu Bakiye Sıfırlama", "Borc": borc_yaz, "Alacak": alacak_yaz, "Odeme_Tipi": "Kayıt Düzeltme", "Taksit": 1, "Fiş No": fis_no_uret("SFR")}
+                                            for key, val in mapping.items():
+                                                if key in c_headers: satir[c_headers.index(key)] = val
+                                            yeni_satirlar.append(satir)
+                                        
+                                        if yeni_satirlar: ws_cari.append_rows(yeni_satirlar, value_input_option='USER_ENTERED')
+                                        return True
+                                    
+                                    if api_kalkani(_toplu_sifirla): st.success("🎉 Tüm müşteri bakiyeleri sıfırlandı!"); st.cache_data.clear(); time.sleep(1); st.rerun()
+                    else:
+                        st.info("🎉 Sistemde bakiyesi olan hiçbir müşteri bulunmuyor. Herkesin hesabı 0,00 TL.")
     elif menu == "⚙️ Sistem Ayarları":
         st.header("⚙️ Genel Ayarlar ve Sabitler")
         t1, t2, t3, t4, t5 = st.tabs(["📊 Ürün Oranları", "🏢 Tali Acenteler", "🏢 Sigorta Şirketleri", "🔄 Veri Senk.", "📇 Hesap Planı (YENİ)"])
