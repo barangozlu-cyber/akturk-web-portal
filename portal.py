@@ -138,7 +138,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.63 (İlave Zeyil & Tam Hata Çözümü)"
+VERSIYON = "v9.64 (Güvenli Kayıt & Mutabakat Güncellemesi)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -167,6 +167,22 @@ def api_kalkani(fonksiyon):
         except Exception as e:
             if deneme < 3: time.sleep(bekleme_suresi); bekleme_suresi *= 2 
             else: st.error("🚨 Google Sunucuları şu an çok yoğun olduğu için yanıt vermiyor. Lütfen sayfayı yenileyip 1 dakika sonra tekrar deneyin."); return None
+
+def guvenli_kayit(tablo, veri, max_deneme=3, is_multi=False):
+    """Kayıt atılamazsa belirli aralıklarla tekrar dener."""
+    for deneme in range(max_deneme):
+        try:
+            if is_multi:
+                tablo.append_rows(veri, value_input_option='USER_ENTERED')
+            else:
+                tablo.append_row(veri, value_input_option='USER_ENTERED')
+            return True
+        except Exception as e:
+            if deneme < max_deneme - 1:
+                time.sleep(2)
+            else:
+                st.error(f"🚨 Bağlantı hatası! Kayıt yapılamadı. Lütfen internetinizi kontrol edip tekrar deneyin. Hata Detayı: {e}")
+                return False
 
 @st.cache_resource(show_spinner="Bağlantı Kuruluyor...")
 def get_credentials():
@@ -517,7 +533,7 @@ else:
             st.markdown("<br>", unsafe_allow_html=True)
             if st.form_submit_button("✅ POLİÇEYİ, CARİYİ VE PDF'İ KAYDET", type="primary", help="Verileri doğrular, PDF'i Google Drive'a atar ve cari hesapları otomatik oluşturur."):
                 with st.spinner("Sisteme İşleniyor..."):
-                    def _kaydet_operasyonu():
+                    try:
                         doc = client.open_by_key(SHEET_ID)
                         mus = temiz_isim(mus_girdi)
                         sir = temiz_isim(sir_girdi)
@@ -566,7 +582,7 @@ else:
                         if "Şirket Komisyonu" not in headers: ws_pol.update_cell(1, len(headers)+1, "Şirket Komisyonu"); headers.append("Şirket Komisyonu")
                         
                         row_dict = {"Tanzim Tarihi": islem_tarihi, "Başlangıç Tarihi": bas, "Bitiş Tarihi": bit, "Müşteri Adı Soyadı": mus, "TC / VKN": tc, "Sigorta Şirketi": sir_iptal, "Sigorta Türü": urn, "Poliçe No": final_pno, "Plaka": plk_temiz, "Net Prim": net, "Brüt Prim": brut, "Şirket Komisyonu": sirket_komisyonu, "Acente": aktif_acente, "Adres": adr, "Telefon / E-mail": ilet, "PDF Linki": link}
-                        ws_pol.append_row([row_dict.get(h, "") for h in headers], value_input_option='USER_ENTERED')
+                        pol_veri = [row_dict.get(h, "") for h in headers]
                         
                         aciklama = f"{sir_iptal.replace(' (İPTAL-SATIŞ)', '').replace(' (İPTAL-ZEYL)', '')} - {urn} - Plaka: {plk_temiz}"
                         yeni_satirlar = []
@@ -603,11 +619,24 @@ else:
                             
                             yeni_satirlar.append(cari_satir_hazirla(islem_tarihi, "Tali Acente Carisi", aktif_acente, acn_detay, akturk_kazanci, 0.0, "Fatura Bekleniyor", 1, yeni_fis_no))
                         
-                        ws_cari.append_rows(yeni_satirlar, value_input_option='USER_ENTERED')
-                        doc.worksheet("Musteriler").append_row([mus, tc, ilet, brut], value_input_option='USER_ENTERED')
-                        return True
-                    
-                    if api_kalkani(_kaydet_operasyonu) is not None: st.success("🎉 Harika! Poliçe başarıyla kaydedildi ve tüm cari hesaplara hatasız işlendi."); st.cache_data.clear()
+                        # ==========================================
+                        # GÜVENLİ KAYIT ADIMLARI
+                        # ==========================================
+                        police_kaydedildi = guvenli_kayit(ws_pol, pol_veri)
+                        if police_kaydedildi:
+                            cari_kaydedildi = guvenli_kayit(ws_cari, yeni_satirlar, is_multi=True)
+                            if cari_kaydedildi:
+                                guvenli_kayit(doc.worksheet("Musteriler"), [mus, tc, ilet, brut])
+                                st.success("✅ Harika! Poliçe başarıyla kaydedildi ve tüm cari hesaplara hatasız işlendi.")
+                            else:
+                                st.warning("⚠️ Poliçe kaydedildi ANCAK anlık bağlantı sorunu yüzünden Cari tabloya yazılamadı. Lütfen cariye manuel fiş giriniz.")
+                        else:
+                            st.error("❌ Poliçe kaydı başarısız oldu. İşlem iptal edildi.")
+                            
+                        st.cache_data.clear()
+
+                    except Exception as e:
+                        st.error(f"🚨 Beklenmeyen bir hata oluştu: {e}")
 
     elif menu == "💰 Cari & Mutabakat":
         st.header("💰 Finans ve Mutabakat Yönetimi")
@@ -739,7 +768,8 @@ else:
                     st.markdown(f"💳 **{secilen_tali} - Tahsilat ve Fatura İşlemi**")
                     c1, c2, c3, c4 = st.columns(4)
                     o_tarih = c1.date_input("İşlem Tarihi", key="t_tarih_tali").strftime("%d.%m.%Y")
-                    islem_yonu = c2.selectbox("İşlem Türü", ["💰 Ödeme Geldi (Bize Yapılan Tahsilat)", "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)", "📄 Fatura / Belge Kesildi"], key="t_yon_tali")
+                    # GÜNCELLENDİ
+                    islem_yonu = c2.selectbox("İşlem Türü", ["💰 Ödeme Geldi (Bize Yapılan Tahsilat)", "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)", "📄 Fatura Kestik (Kuruma Borç Yaz)", "📄 Fatura Geldi (Kuruma Alacak Yaz)"], key="t_yon_tali")
                     o_tutar = float(sayiya_cevir(c3.text_input("Tutar (Örn: 1500,50)", value="", key="t_tutar_tali")))
                     o_detay = c4.text_input("Açıklama", key="t_detay_tali")
                     
@@ -750,7 +780,8 @@ else:
                                 c_headers = ws_cari.row_values(1)
                                 if "Fiş No" not in c_headers: ws_cari.update_cell(1, len(c_headers)+1, "Fiş No"); c_headers.append("Fiş No")
                                 satir = [""] * len(c_headers)
-                                mapping = {"Tarih": o_tarih, "Islem_Turu": "Tali Acente Carisi", "Kisi_Kurum": secilen_tali, "Islem_Detayi": f"{islem_yonu} - {o_detay}", "Borc": o_tutar if "Ödeme Çıktı" in islem_yonu else 0.0, "Alacak": o_tutar if "Ödeme Geldi" in islem_yonu else 0.0, "Odeme_Tipi": "Banka/Resmi Evrak", "Taksit": 1, "Fiş No": fis_no_uret("THS")}
+                                # GÜNCELLENDİ
+                                mapping = {"Tarih": o_tarih, "Islem_Turu": "Tali Acente Carisi", "Kisi_Kurum": secilen_tali, "Islem_Detayi": f"{islem_yonu} - {o_detay}", "Borc": o_tutar if "Ödeme Çıktı" in islem_yonu or "Borç Yaz" in islem_yonu else 0.0, "Alacak": o_tutar if "Ödeme Geldi" in islem_yonu or "Alacak Yaz" in islem_yonu else 0.0, "Odeme_Tipi": "Banka/Resmi Evrak", "Taksit": 1, "Fiş No": fis_no_uret("THS")}
                                 for key, val in mapping.items():
                                     if key in c_headers: satir[c_headers.index(key)] = val
                                 ws_cari.append_row(satir, value_input_option='USER_ENTERED')
@@ -828,7 +859,8 @@ else:
                     st.markdown(f"💳 **{secilen_sirket} - Tahsilat ve Fatura İşlemi**")
                     c1, c2, c3, c4 = st.columns(4)
                     o_tarih = c1.date_input("İşlem Tarihi", key="s_tarih_sirket").strftime("%d.%m.%Y")
-                    islem_yonu = c2.selectbox("İşlem Türü", ["💰 Ödeme Geldi (Bize Yapılan Tahsilat)", "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)", "📄 Fatura / Belge Kesildi"], key="s_yon_sirket")
+                    # GÜNCELLENDİ
+                    islem_yonu = c2.selectbox("İşlem Türü", ["💰 Ödeme Geldi (Bize Yapılan Tahsilat)", "💸 Ödeme Çıktı (Bizden Kuruma Yapılan)", "📄 Fatura Kestik (Kuruma Borç Yaz)", "📄 Fatura Geldi (Kuruma Alacak Yaz)"], key="s_yon_sirket")
                     o_tutar = float(sayiya_cevir(c3.text_input("Tutar (Örn: 1500,50)", value="", key="s_tutar_sirket")))
                     o_detay = c4.text_input("Açıklama", key="s_detay_sirket")
                     
@@ -839,7 +871,8 @@ else:
                                 c_headers = ws_cari.row_values(1)
                                 if "Fiş No" not in c_headers: ws_cari.update_cell(1, len(c_headers)+1, "Fiş No"); c_headers.append("Fiş No")
                                 satir = [""] * len(c_headers)
-                                mapping = {"Tarih": o_tarih, "Islem_Turu": "Sigorta Şirketi Carisi", "Kisi_Kurum": secilen_sirket, "Islem_Detayi": f"{islem_yonu} - {o_detay}", "Borc": o_tutar if "Ödeme Çıktı" in islem_yonu else 0.0, "Alacak": o_tutar if "Ödeme Geldi" in islem_yonu else 0.0, "Odeme_Tipi": "Banka/Resmi Evrak", "Taksit": 1, "Fiş No": fis_no_uret("THS")}
+                                # GÜNCELLENDİ
+                                mapping = {"Tarih": o_tarih, "Islem_Turu": "Sigorta Şirketi Carisi", "Kisi_Kurum": secilen_sirket, "Islem_Detayi": f"{islem_yonu} - {o_detay}", "Borc": o_tutar if "Ödeme Çıktı" in islem_yonu or "Borç Yaz" in islem_yonu else 0.0, "Alacak": o_tutar if "Ödeme Geldi" in islem_yonu or "Alacak Yaz" in islem_yonu else 0.0, "Odeme_Tipi": "Banka/Resmi Evrak", "Taksit": 1, "Fiş No": fis_no_uret("THS")}
                                 for key, val in mapping.items():
                                     if key in c_headers: satir[c_headers.index(key)] = val
                                 ws_cari.append_row(satir, value_input_option='USER_ENTERED')
@@ -987,31 +1020,24 @@ else:
         st.divider()
 
         if not df_pol.empty and "Bitiş Tarihi" in df_pol.columns:
-            # 1. Bitiş tarihlerini algıla
             df_pol['Bit_Obj'] = pd.to_datetime(df_pol['Bitiş Tarihi'], dayfirst=True, errors='coerce')
             df_gecerli = df_pol.dropna(subset=['Bit_Obj']).copy()
             
-            # --- ZEKİ MOTOR 1: OTOMATİK DÜŞME ---
-            # Sadece en güncel poliçeleri tutar. Yeni poliçe kesilince eskisi takvimden uçar.
             df_gecerli["Anahtar"] = df_gecerli["Plaka"].astype(str).str.strip() + "_" + df_gecerli["Müşteri Adı Soyadı"].astype(str).str.strip() + "_" + df_gecerli["Sigorta Türü"].astype(str).str.strip()
             idx_guncel = df_gecerli.groupby("Anahtar")["Bit_Obj"].idxmax()
             en_guncel_policeler = df_gecerli.loc[idx_guncel].copy()
             
-            # İptal edilmiş veya manuel düşürülmüşleri çıkar
             takvim_temel = en_guncel_policeler[~en_guncel_policeler["Sigorta Şirketi"].str.contains("İPTAL", na=False)]
             takvim_temel = takvim_temel[takvim_temel["Başlangıç Tarihi"] != takvim_temel["Bitiş Tarihi"]]
 
-            # Satış/İptal plakalarını tamamen temizle
             iptal_df = df_pol[df_pol["Sigorta Şirketi"].str.contains("İPTAL-SATIŞ", na=False)]
             iptal_plakalar = iptal_df[iptal_df["Plaka"] != ""]["Plaka"].unique()
             iptal_musteriler = iptal_df[iptal_df["Plaka"] == ""]["Müşteri Adı Soyadı"].unique()
             takvim_temel = takvim_temel[~takvim_temel["Plaka"].isin(iptal_plakalar)]
             takvim_temel = takvim_temel[~((takvim_temel["Plaka"] == "") & (takvim_temel["Müşteri Adı Soyadı"].isin(iptal_musteriler)))]
             
-            # 2. Seçili tarihi filtrele
             takvim_temel = takvim_temel[(takvim_temel['Bit_Obj'].dt.date >= takvim_basla) & (takvim_temel['Bit_Obj'].dt.date <= takvim_bitis)].copy()
             
-            # 3. Kalan günü hesapla ve sırala
             takvim_temel["Kalan Gün"] = (takvim_temel['Bit_Obj'].dt.normalize() - pd.Timestamp.today().normalize()).dt.days
             takvim = takvim_temel.sort_values("Bit_Obj", ascending=True)
             
@@ -1030,7 +1056,6 @@ else:
                 excel_indir(takvim[gosterim], "Bu Takvimi Excel İndir", "Ozel_Yenileme_Takvimi", help_text="Bu listeyi Excel olarak bilgisayarınıza kaydeder.")
                 
                 st.divider()
-                # --- ZEKİ MOTOR 2: MANUEL DÜŞÜRME (YENİLENMEYECEK SEÇİMİ) ---
                 st.markdown("### 🚫 Müşteri Yenilemedi / Takvimden Düşür")
                 st.info("Müşteri yenilemekten vazgeçtiyse, o poliçeyi takvimden kalıcı olarak gizleyebilirsiniz (Mali geçmiş bozulmaz).")
                 
@@ -1048,7 +1073,6 @@ else:
                                 
                                 sirket_idx = p_headers.index("Sigorta Şirketi") + 1
                                 current_sirket = ws_pol.cell(satir_no, sirket_idx).value
-                                # Akıllı iptal etiketi ekleniyor (Cari mutabakatı bozmayan özel bir etiket)
                                 ws_pol.update_cell(satir_no, sirket_idx, f"{current_sirket} (İPTAL-YENİLENMEDİ)")
                                 return True
                             
@@ -1358,7 +1382,6 @@ else:
                 
                 bakiye_df = m_cariler.groupby("Kisi_Kurum")[["Borc", "Alacak"]].sum().reset_index()
                 bakiye_df["Bakiye"] = bakiye_df["Borc"] - bakiye_df["Alacak"]
-                # Sadece bakiyesi 0 olmayanları filtrele (Küsurat hatalarına karşı 0.01 hassasiyeti)
                 bakiye_df = bakiye_df[abs(bakiye_df["Bakiye"]) > 0.01] 
                 
                 sifirlama_tipi = st.radio("Sıfırlama Yöntemi:", ["🎯 Tek Bir Müşteriyi Seçerek Sıfırla", "💥 TÜM MÜŞTERİLERİ Toplu Sıfırla (DİKKAT)"], horizontal=True)
