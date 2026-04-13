@@ -1080,7 +1080,7 @@ else:
             else: 
                 st.info("Bu tarihler arasında süresi dolacak veya henüz yenilenmemiş poliçe bulunmuyor.")
                 
-    elif menu == "🔎 Akıllı Arama":
+    eelif menu == "🔎 Akıllı Arama":
         st.header("🔎 Akıllı & Bağlamlı Arama")
         
         # --- 1. AÇILIR PENCERE (MODAL) FONKSİYONLARI ---
@@ -1193,39 +1193,72 @@ else:
         # --- 2. ARAMA MOTORU VE LİSTELEME ---
         df_pol = get_data("Policeler")
         if not df_pol.empty:
-            ara = st.text_input("🔍 Müşteri Adı, Plaka veya Poliçe No Yazın (Örn: 06EJA):")
+            st.info("💡 Müşteri Adı, Plaka veya Poliçe Numarası yazarak arama yapabilirsiniz. Asıl poliçeler ve onlara bağlı zeyil/iptaller otomatik olarak gruplanır.")
+            ara = st.text_input("🔍 Aradığınız kelimeyi yazın:", placeholder="Örn: Baran Gözlü, 35B123, Aktürk İnşaat...")
             
             if ara:
                 ara_temiz = temiz_isim(ara)
                 df_pol['Kök_Poliçe'] = df_pol['Poliçe No'].apply(get_kok_police)
                 
+                # Arama maskesi
                 mask = df_pol['Müşteri Adı Soyadı'].str.contains(ara_temiz, na=False) | df_pol['Plaka'].str.contains(ara_temiz, na=False) | df_pol['Poliçe No'].str.contains(ara_temiz, na=False)
                 ilk_sonuc = df_pol[mask].copy()
                 
                 if not ilk_sonuc.empty:
+                    # Bağlamlı arama: Bulunan poliçelerin kök numaraları üzerinden diğer ilişkili kayıtları (zeyilleri vs) da getir
                     eslesen_kokler = [k for k in ilk_sonuc['Kök_Poliçe'].dropna().unique().tolist() if str(k).strip() != ""]
                     sonuc = df_pol[df_pol['Kök_Poliçe'].isin(eslesen_kokler) | mask].copy() if eslesen_kokler else ilk_sonuc.copy()
                     
+                    # Tarihe göre sıralayalım ki bağlamlı poliçeler alt alta düzgün görünsün
+                    sonuc['Sıralama_Tarihi'] = pd.to_datetime(sonuc['Tanzim Tarihi'], dayfirst=True, errors='coerce')
+                    sonuc = sonuc.sort_values(by=["Kök_Poliçe", "Sıralama_Tarihi"], ascending=[True, False]).drop(columns=['Sıralama_Tarihi'])
+                    
+                    st.success(f"✅ Sistemde bu aramaya ait toplam **{len(sonuc)}** adet bağlantılı poliçe kaydı bulundu.")
+                    
+                    # --- GENEL RAPOR TABLOSU ---
+                    st.markdown("### 📊 Genel Poliçe Listesi (Rapor)")
+                    gosterilecek_kolonlar = ["Tanzim Tarihi", "Başlangıç Tarihi", "Bitiş Tarihi", "Müşteri Adı Soyadı", "Plaka", "Sigorta Şirketi", "Sigorta Türü", "Poliçe No", "Net Prim", "Brüt Prim"]
+                    if "PDF Linki" in sonuc.columns: gosterilecek_kolonlar.append("PDF Linki")
+                    
+                    st.dataframe(df_gorsel_yap(sonuc, ["Net Prim", "Brüt Prim", "Şirket Komisyonu"])[gosterilecek_kolonlar], column_config=STIL_AYARLARI, use_container_width=True)
+                    
+                    dosya_ismi = f"Arama_Sonuclari_{ara.replace(' ', '_')}"
+                    excel_indir(sonuc[gosterilecek_kolonlar], f"Bu Listeyi Excel Olarak İndir", dosya_ismi, help_text="Sadece aradığınız kelimeye ait poliçeleri indirir.")
+                    
+                    st.divider()
+                    
+                    # --- HIZLI İŞLEM KARTLARI VE PDF İNDİRME ---
+                    st.markdown("### ⚙️ Hızlı İşlemler ve PDF Yönetimi")
                     if len(sonuc) > 50:
-                        st.warning(f"⚠️ Çok fazla sonuç bulundu ({len(sonuc)} kayıt). Arayüzün yavaşlamaması için ilk 50 kayıt listeleniyor. Lütfen aramayı daraltın.")
-                        sonuc = sonuc.head(50)
-                    
-                    # ... üst kısımlar ...
-                    st.markdown("### 📋 Bulunan Kayıtlar ve Hızlı İşlemler")
-                    
-                    for index, row in sonuc.iterrows():
+                        st.warning(f"⚠️ Çok fazla sonuç bulunduğu için arayüzün yavaşlamaması adına sadece ilk 50 kaydın işlem kartı aşağıda listeleniyor.")
+                        kart_icin_sonuc = sonuc.head(50)
+                    else:
+                        kart_icin_sonuc = sonuc
+                        
+                    for index, row in kart_icin_sonuc.iterrows():
                         with st.container():
-                            
-                            # KESİN ÇÖZÜM: Tüm HTML'i enter/alt satır kullanmadan tek bir satıra yapıştırdık!
-                            html_kart = f"<div style='padding: 15px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 10px; background-color: white;'><div style='display: flex; justify-content: space-between; align-items: center;'><div><h4 style='margin: 0; color: #1E3A8A;'>{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4><p style='margin: 5px 0 0 0; color: #64748B; font-size: 14px;'>{row['Sigorta Şirketi']} | {row['Sigorta Türü']} | Brüt: {para_format(row['Brüt Prim'])} | Tarih: {row['Tanzim Tarihi']}</p></div></div></div>"
+                            html_kart = f"<div style='padding: 15px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 10px; background-color: white;'><div style='display: flex; justify-content: space-between; align-items: center;'><div><h4 style='margin: 0; color: #1E3A8A;'>{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4><p style='margin: 5px 0 0 0; color: #64748B; font-size: 14px;'>{row['Sigorta Şirketi']} | {row['Sigorta Türü']} | Poliçe No: {row['Poliçe No']} | Brüt: {para_format(row['Brüt Prim'])} | Tarih: {row['Tanzim Tarihi']}</p></div></div></div>"
                             st.markdown(html_kart, unsafe_allow_html=True)
                             
-                            b1, b2, b3 = st.columns([1, 1, 8])
+                            # Kolonları PDF butonuna da yer açacak şekilde böldük
+                            b1, b2, b3, b4 = st.columns([1.5, 1.5, 2.5, 4.5])
+                            
                             if b1.button("✏️ Düzenle", key=f"edit_{index}"):
                                 duzenleme_modali(row.to_dict())
+                                
                             if b2.button("🗑️ Sil", key=f"del_{index}"):
                                 silme_modali(row.to_dict())
-                    # ... alt kısımlar ...
+                                
+                            # PDF Direkt İndirme Motoru
+                            pdf_url = row.get("PDF Linki", "Yok")
+                            if pd.notna(pdf_url) and str(pdf_url).strip() not in ["", "Yok"]:
+                                match = re.search(r'/d/([a-zA-Z0-9_-]+)', str(pdf_url))
+                                if match:
+                                    # Google Drive ID'sini alıp direkt indirme (export=download) linkine çeviriyoruz
+                                    dl_link = f"https://drive.google.com/uc?export=download&id={match.group(1)}"
+                                    b3.link_button("📥 PDF'i Direkt İndir", url=dl_link)
+                                else:
+                                    b3.link_button("📄 PDF'i Görüntüle", url=str(pdf_url))
                 else: 
                     st.warning("Eşleşen tam kayıt bulunamadı.")
                     tum = [str(x) for x in df_pol['Müşteri Adı Soyadı'].dropna().unique().tolist() + df_pol['Plaka'].dropna().unique().tolist() if str(x).strip() != ""]
