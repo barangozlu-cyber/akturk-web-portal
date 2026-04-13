@@ -1210,26 +1210,22 @@ else:
                         st.warning(f"⚠️ Çok fazla sonuç bulundu ({len(sonuc)} kayıt). Arayüzün yavaşlamaması için ilk 50 kayıt listeleniyor. Lütfen aramayı daraltın.")
                         sonuc = sonuc.head(50)
                     
+                    # ... üst kısımlar ...
                     st.markdown("### 📋 Bulunan Kayıtlar ve Hızlı İşlemler")
                     
                     for index, row in sonuc.iterrows():
                         with st.container():
-                            st.markdown(f"""<div style="padding: 15px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 10px; background-color: white;">
-<div style="display: flex; justify-content: space-between; align-items: center;">
-    <div>
-        <h4 style="margin: 0; color: #1E3A8A;">{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4>
-        <p style="margin: 5px 0 0 0; color: #64748B; font-size: 14px;">
-            {row['Sigorta Şirketi']} | {row['Sigorta Türü']} | Brüt: {para_format(row['Brüt Prim'])} | Tarih: {row['Tanzim Tarihi']}
-        </p>
-    </div>
-</div>
-</div>""", unsafe_allow_html=True)
+                            
+                            # KESİN ÇÖZÜM: Tüm HTML'i enter/alt satır kullanmadan tek bir satıra yapıştırdık!
+                            html_kart = f"<div style='padding: 15px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 10px; background-color: white;'><div style='display: flex; justify-content: space-between; align-items: center;'><div><h4 style='margin: 0; color: #1E3A8A;'>{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4><p style='margin: 5px 0 0 0; color: #64748B; font-size: 14px;'>{row['Sigorta Şirketi']} | {row['Sigorta Türü']} | Brüt: {para_format(row['Brüt Prim'])} | Tarih: {row['Tanzim Tarihi']}</p></div></div></div>"
+                            st.markdown(html_kart, unsafe_allow_html=True)
                             
                             b1, b2, b3 = st.columns([1, 1, 8])
                             if b1.button("✏️ Düzenle", key=f"edit_{index}"):
                                 duzenleme_modali(row.to_dict())
                             if b2.button("🗑️ Sil", key=f"del_{index}"):
                                 silme_modali(row.to_dict())
+                    # ... alt kısımlar ...
                 else: 
                     st.warning("Eşleşen tam kayıt bulunamadı.")
                     tum = [str(x) for x in df_pol['Müşteri Adı Soyadı'].dropna().unique().tolist() + df_pol['Plaka'].dropna().unique().tolist() if str(x).strip() != ""]
