@@ -1214,18 +1214,16 @@ else:
                     
                     for index, row in sonuc.iterrows():
                         with st.container():
-                            st.markdown(f"""
-                            <div style="padding: 15px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 10px; background-color: white;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <h4 style="margin: 0; color: #1E3A8A;">{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4>
-                                        <p style="margin: 5px 0 0 0; color: #64748B; font-size: 14px;">
-                                            {row['Sigorta Şirketi']} | {row['Sigorta Türü']} | Brüt: {para_format(row['Brüt Prim'])} | Tarih: {row['Tanzim Tarihi']}
-                                        </p>
-                                    </div>
-                                </div>
-                            </div>
-                            """, unsafe_allow_html=True)
+                            st.markdown(f"""<div style="padding: 15px; border: 1px solid #E2E8F0; border-radius: 8px; margin-bottom: 10px; background-color: white;">
+<div style="display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h4 style="margin: 0; color: #1E3A8A;">{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4>
+        <p style="margin: 5px 0 0 0; color: #64748B; font-size: 14px;">
+            {row['Sigorta Şirketi']} | {row['Sigorta Türü']} | Brüt: {para_format(row['Brüt Prim'])} | Tarih: {row['Tanzim Tarihi']}
+        </p>
+    </div>
+</div>
+</div>""", unsafe_allow_html=True)
                             
                             b1, b2, b3 = st.columns([1, 1, 8])
                             if b1.button("✏️ Düzenle", key=f"edit_{index}"):
