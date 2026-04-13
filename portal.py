@@ -21,7 +21,7 @@ import random
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.66", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.67", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
@@ -159,7 +159,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.66 (Premium UI & Direct PDF Download)"
+VERSIYON = "v9.67 (Açılır Şirket Menüsü Modülü)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -467,6 +467,8 @@ else:
 
     if menu == "📥 İşlem Merkezi (Poliçe)":
         st.header("📥 Yeni Poliçe & İşlem Kaydı")
+        
+        # AYARLAR TABLOLARINI ÇEK
         df_urun = get_data("Ayarlar_Urunler")
         urun_listesi = df_urun["Urun_Adi"].tolist() if not df_urun.empty else ["Trafik Sigortası", "Kasko", "Sağlık Sigortası"]
         dict_urun = dict(zip(df_urun['Urun_Adi'], df_urun['Komisyon_Orani'])) if not df_urun.empty else {}
@@ -476,6 +478,10 @@ else:
         if "AKTÜRK SİGORTA (MERKEZ)" not in acente_listesi: acente_listesi.insert(0, "AKTÜRK SİGORTA (MERKEZ)")
         dict_acente = dict(zip(df_acente['Acente_Adi'], df_acente['Tali_Oran'])) if not df_acente.empty else {}
         acente_listesi.append("➕ YENİ TALİ ACENTE EKLE")
+
+        df_sirket_ayar = get_data("Ayarlar_Sirketler")
+        sirket_listesi = df_sirket_ayar["Sirket_Adi"].tolist() if not df_sirket_ayar.empty else ["Doğa Sigorta", "Hepiyi Sigorta", "Allianz Sigorta"]
+        sirket_listesi.append("➕ YENİ ŞİRKET EKLE")
 
         st.info("💡 **Yapay Zeka Destekli Okuma:** Müşterinin PDF poliçesini aşağıya sürükleyin, formdaki boşluklar otomatik dolsun.")
         file = st.file_uploader("PDF Poliçe Seçin", type="pdf", help="Poliçeyi bu alana sürükleyip bırakabilirsiniz.")
@@ -519,10 +525,23 @@ else:
             ilet = c6.text_input("Telefon / E-mail", ana_pol_data.get("Telefon / E-mail", ""))
             
             c7, c8, c9 = st.columns(3)
+            
+            # --- ŞİRKET SEÇİMİ AÇILIR MENÜ (SELECTBOX) ---
             def_sir = str(ana_pol_data.get("Sigorta Şirketi", p_data["sirket"])).replace(" (İPTAL-SATIŞ)", "").replace(" (İPTAL-ZEYL)", "") if ana_pol_data else p_data["sirket"]
-            def_plk = ana_pol_data.get("Plaka", p_data["plaka"]) if ana_pol_data else p_data["plaka"]
-            sir_girdi = c7.text_input("Sigorta Şirketi (Doğa, Hepiyi, Allianz vb.)", def_sir)
+            
+            # Eğer PDF'den gelen veya eski poliçedeki şirket kayıtlı listemizde yoksa, listeye geçici olarak başa ekleyelim ki selectbox hata vermesin.
+            if def_sir and def_sir not in sirket_listesi and def_sir != "":
+                sirket_listesi.insert(0, def_sir)
+
+            sir_index = sirket_listesi.index(def_sir) if def_sir in sirket_listesi else 0
+            sir_girdi = c7.selectbox("Sigorta Şirketi", sirket_listesi, index=sir_index, help="Eğer aradığınız şirket listede yoksa, en alttan '➕ YENİ ŞİRKET EKLE' seçeneğine tıklayın.")
+            
+            yeni_sirket_adi = ""
+            if sir_girdi == "➕ YENİ ŞİRKET EKLE":
+                yeni_sirket_adi = c7.text_input("Yeni Şirket Adını Yazın (Örn: HDI Sigorta):")
+
             pno = c8.text_input("Poliçe No (Bu zeylin/işlemin numarası)", p_data["p_no"])
+            def_plk = ana_pol_data.get("Plaka", p_data["plaka"]) if ana_pol_data else p_data["plaka"]
             plk = c9.text_input("Plaka", def_plk)
             
             st.subheader("2. Finans, Komisyon ve Ödeme")
@@ -557,7 +576,10 @@ else:
                     try:
                         doc = client.open_by_key(SHEET_ID)
                         mus = temiz_isim(mus_girdi)
-                        sir = temiz_isim(sir_girdi)
+                        
+                        # Sigorta şirketini doğru değişkenden alalım
+                        sir = temiz_isim(sir_girdi) if sir_girdi != "➕ YENİ ŞİRKET EKLE" else temiz_isim(yeni_sirket_adi)
+                        
                         aktif_acente = temiz_isim(acn) if acn != "➕ YENİ TALİ ACENTE EKLE" else "➕ YENİ TALİ ACENTE EKLE"
                         plk_temiz = str(plk).replace(" ", "").upper()
                         yeni_fis_no = fis_no_uret("POL")
@@ -594,6 +616,10 @@ else:
                         else: t_oran = float(sayiya_cevir(dict_acente.get(aktif_acente, 0.0)))
                         if t_oran > 1: t_oran /= 100 
                         
+                        # EĞER YENİ BİR ŞİRKET EKLENDİYSE, AYARLARA KAYDET
+                        if sir_girdi == "➕ YENİ ŞİRKET EKLE" and yeni_sirket_adi != "":
+                            doc.worksheet("Ayarlar_Sirketler").append_row([sir, ""], value_input_option='USER_ENTERED')
+
                         akturk_kazanci = float(sirket_komisyonu * t_oran)
                         islem_tarihi = tarih_formatla(tan)
                         final_pno = pno + baglanti_notu if baglanti_notu else pno
@@ -1000,7 +1026,7 @@ else:
                         sec_urun_g = c_f4.selectbox("Ürün Türü Filtresi (Trafik, Kasko vb.)", tum_urunler)
                         
                         if sec_acente_g != "Tüm Acenteler (Genel)": df_g = df_g[df_g["Acente"] == sec_acente_g]
-                        if sec_urun_g != "Tüm Ürünler (Genel)": df_g = df_g[df_g["Sigorta Türü"] == sec_urun_g]
+                        if sec_urun_g != "Tüm Ürünler (Genel)": df_g = df_g[df_g["Sigorta Türü"] == securun_g]
                         
                         if not df_g.empty:
                             df_g["Net Prim"] = df_g["Net Prim"].apply(sayiya_cevir); df_g["Brüt Prim"] = df_g["Brüt Prim"].apply(sayiya_cevir)
