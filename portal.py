@@ -1080,7 +1080,7 @@ else:
             else: 
                 st.info("Bu tarihler arasında süresi dolacak veya henüz yenilenmemiş poliçe bulunmuyor.")
                 
-    eelif menu == "🔎 Akıllı Arama":
+    elif menu == "🔎 Akıllı Arama":
         st.header("🔎 Akıllı & Bağlamlı Arama")
         
         # --- 1. AÇILIR PENCERE (MODAL) FONKSİYONLARI ---
