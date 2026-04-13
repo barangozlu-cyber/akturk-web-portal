@@ -21,114 +21,135 @@ import random
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.65", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.66", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
-/* 1. ANA MENÜ VE HEADER DÜZENİ */
+/* =========================================
+   💎 PREMIUM ERP UI / UX TASARIM MİMARİSİ
+========================================= */
+
+:root {
+    --primary: #0EA5E9; /* Modern parlak mavi */
+    --primary-dark: #0284C7;
+    --bg-color: #F8FAFC; /* Çok hafif, göz yormayan gri-buz beyazı */
+    --card-bg: #FFFFFF;
+    --text-main: #1E293B;
+    --text-muted: #64748B;
+}
+
+/* 1. TYPOGRAPHY & FONT SETTINGS */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif !important; }
+.stApp { background-color: var(--bg-color) !important; color: var(--text-main) !important; }
+
+h1, h2, h3, h4 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.03em !important; }
+p, span, div { color: var(--text-main); }
+
+/* Streamlit Header ve Footer Gizleme */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
+header[data-testid="stHeader"] { background: transparent !important; }
 
-header[data-testid="stHeader"] {
-    background-color: rgba(0,0,0,0) !important;
-    visibility: visible !important;
+/* 2. SIDEBAR (SOL MENÜ) - ŞIK VE PROFESYONEL */
+[data-testid="stSidebar"] {
+    background-color: #FFFFFF !important;
+    border-right: 1px solid #E2E8F0 !important;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.02) !important;
 }
 
-/* 2. AKILLI MENÜ AÇMA/KAPATMA BUTONU */
-button[data-testid="stSidebarCollapseButton"] {
-    background-color: #1D4ED8 !important; /* Aktürk Mavisi */
-    color: white !important;
-    border: 2px solid #1E3A8A !important;
-    border-radius: 10px !important;
-    width: 45px !important;
-    height: 45px !important;
-    transition: all 0.3s ease !important;
-    box-shadow: 0 4px 15px rgba(29, 78, 216, 0.4) !important;
-    margin: 10px !important;
-    z-index: 999999;
-}
-
-button[data-testid="stSidebarCollapseButton"] svg {
-    fill: white !important;
-    color: white !important;
-}
-
-button[data-testid="stSidebarCollapseButton"]:hover {
-    background-color: #1E3A8A !important;
-    transform: scale(1.1);
-}
-
-/* TOOLTIP (BİLGİLENDİRME YAZILARI) */
-button[data-testid="stSidebarCollapseButton"]:hover::after {
-    position: absolute;
-    left: 55px;
-    top: 10px;
-    background-color: #0F172A;
-    color: white;
-    padding: 6px 12px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 600;
-    white-space: nowrap;
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3);
-    z-index: 999999;
-}
-
-button[data-testid="stSidebarCollapseButton"][aria-expanded="true"]:hover::after {
-    content: "⬅️ Menü Daralt";
-}
-button[data-testid="stSidebarCollapseButton"][aria-expanded="false"]:hover::after {
-    content: "➡️ Menü Aç";
-}
-
-/* 3. GENEL TEMA VE GÖRSEL TASARIM */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif !important; }
-.stApp { background-color: #F0F2F5 !important; color: #1E293B !important; }
-
-h1, h2, h3, h4 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.5px; }
-p { color: #334155 !important; }
-
-/* INPUT VE TABLAR */
-.stTabs [data-baseweb="tab-list"] { background-color: transparent; border-bottom: 2px solid #E2E8F0; gap: 20px; }
-.stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 700 !important; }
-.stTabs [aria-selected="true"] p { color: #1D4ED8 !important; font-weight: 800 !important; }
-
-/* SIDEBAR (SOL MENÜ) TASARIMI */
-[data-testid="stSidebar"] { background-color: #FFFFFF !important; border-right: 1px solid #E2E8F0 !important; }
+/* Pasif Menü Seçenekleri */
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
     padding: 12px 16px !important;
-    margin-bottom: 6px !important;
-    border-radius: 8px !important;
+    margin-bottom: 8px !important;
+    border-radius: 12px !important;
+    font-weight: 600 !important;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    color: var(--text-muted);
     border: 1px solid transparent;
-    transition: all 0.2s ease !important;
 }
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:hover {
-    background-color: #F8FAFC !important;
+    background-color: #F1F5F9 !important;
+    color: #0F172A !important;
     transform: translateX(4px);
 }
+
+/* Aktif (Seçili) Menü Butonu - Koyu Antrasit/Lacivert Degrade */
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
-    background: linear-gradient(90deg, #EFF6FF 0%, #FFFFFF 100%) !important;
-    border-left: 4px solid #2563EB !important;
-    border-top: 1px solid #E2E8F0;
-    border-bottom: 1px solid #E2E8F0;
-    border-right: 1px solid #E2E8F0;
+    background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%) !important;
+    color: #FFFFFF !important;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2) !important;
+    border: none !important;
+}
+[data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) p {
+    color: #FFFFFF !important;
 }
 
-/* METRİKLER (KUTUCUKLAR) */
+/* 3. METRİKLER (KASA DURUM KARTLARI) */
 div[data-testid="stMetric"] {
-    background-color: #FFFFFF !important;
-    border-radius: 12px !important;
-    padding: 20px !important;
+    background-color: var(--card-bg) !important;
+    border-radius: 16px !important;
+    padding: 24px !important;
     border: 1px solid #E2E8F0 !important;
-    border-left: 5px solid #2563EB !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border-left: 6px solid var(--primary) !important;
+}
+div[data-testid="stMetric"]:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04) !important;
+}
+div[data-testid="stMetric"] label { color: var(--text-muted) !important; font-weight: 600 !important; font-size: 0.9rem !important; }
+div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #0F172A !important; font-weight: 800 !important; font-size: 1.8rem !important; }
+
+/* 4. BUTONLAR */
+/* Ana İşlem Butonları (Primary) */
+.stButton>button[kind="primary"] {
+    background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 0.5rem 1rem !important;
+    font-weight: 700 !important;
+    box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3) !important;
+    transition: all 0.3s ease !important;
+}
+.stButton>button[kind="primary"]:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 6px 20px rgba(2, 132, 199, 0.4) !important;
 }
 
-/* BUTONLAR */
-.stButton>button[kind="primary"] {
-    background: linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%) !important;
-    border-radius: 8px !important;
-    box-shadow: 0 4px 12px rgba(29, 78, 216, 0.3) !important;
+/* İkincil Butonlar (Secondary) */
+.stButton>button[kind="secondary"] {
+    border: 1px solid #CBD5E1 !important;
+    border-radius: 12px !important;
+    background-color: white !important;
+    color: #334155 !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+}
+.stButton>button[kind="secondary"]:hover {
+    background-color: #F8FAFC !important;
+    border-color: #94A3B8 !important;
+}
+
+/* 5. TABLAR (SEKMELER) */
+.stTabs [data-baseweb="tab-list"] { background-color: transparent; border-bottom: 2px solid #E2E8F0; gap: 32px; }
+.stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 600 !important; font-size: 1.05rem !important; transition: color 0.2s; }
+.stTabs [data-baseweb="tab"]:hover p { color: #0F172A !important; }
+.stTabs [aria-selected="true"] p { color: var(--primary-dark) !important; font-weight: 800 !important; }
+.stTabs [aria-selected="true"] { border-bottom: 3px solid var(--primary-dark) !important; }
+
+/* 6. INPUT VE FORMLAR */
+.stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input {
+    border-radius: 10px !important;
+    border: 1px solid #CBD5E1 !important;
+    padding: 0.5rem 1rem !important;
+    transition: border-color 0.2s, box-shadow 0.2s !important;
+}
+.stTextInput input:focus, .stTextArea textarea:focus, .stSelectbox select:focus, .stNumberInput input:focus {
+    border-color: var(--primary) !important;
+    box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15) !important;
 }
 </style>
 """
@@ -138,7 +159,7 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.64 (Modal UI & Mutabakat Güncellemesi)"
+VERSIYON = "v9.66 (Premium UI & Direct PDF Download)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
@@ -1079,7 +1100,7 @@ else:
                                 st.rerun()
             else: 
                 st.info("Bu tarihler arasında süresi dolacak veya henüz yenilenmemiş poliçe bulunmuyor.")
-                
+
     elif menu == "🔎 Akıllı Arama":
         st.header("🔎 Akıllı & Bağlamlı Arama")
         
@@ -1254,7 +1275,6 @@ else:
                             if pd.notna(pdf_url) and str(pdf_url).strip() not in ["", "Yok"]:
                                 match = re.search(r'/d/([a-zA-Z0-9_-]+)', str(pdf_url))
                                 if match:
-                                    # Google Drive ID'sini alıp direkt indirme (export=download) linkine çeviriyoruz
                                     dl_link = f"https://drive.google.com/uc?export=download&id={match.group(1)}"
                                     b3.link_button("📥 PDF'i Direkt İndir", url=dl_link)
                                 else:
