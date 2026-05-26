@@ -18,10 +18,13 @@ from openpyxl.styles import Border, Side, Alignment
 import time
 import random
 
+# 🔥 YENİ: SUPABASE ENTEGRASYONU
+from supabase import create_client, Client
+
 # ==========================================
 # 💎 PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
-st.set_page_config(page_title="Aktürk ERP v9.67", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
+st.set_page_config(page_title="Aktürk ERP v9.70", page_icon="🛡️", layout="wide", initial_sidebar_state="auto")
 
 gizleme_kodu = """
 <style>
@@ -30,15 +33,14 @@ gizleme_kodu = """
 ========================================= */
 
 :root {
-    --primary: #0EA5E9; /* Modern parlak mavi */
+    --primary: #0EA5E9; 
     --primary-dark: #0284C7;
-    --bg-color: #F8FAFC; /* Çok hafif, göz yormayan gri-buz beyazı */
+    --bg-color: #F8FAFC; 
     --card-bg: #FFFFFF;
     --text-main: #1E293B;
     --text-muted: #64748B;
 }
 
-/* 1. TYPOGRAPHY & FONT SETTINGS */
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif !important; }
 .stApp { background-color: var(--bg-color) !important; color: var(--text-main) !important; }
@@ -46,19 +48,16 @@ html, body, [class*="css"] { font-family: 'Plus Jakarta Sans', sans-serif !impor
 h1, h2, h3, h4 { color: #0F172A !important; font-weight: 800 !important; letter-spacing: -0.03em !important; }
 p, span, div { color: var(--text-main); }
 
-/* Streamlit Header ve Footer Gizleme */
 #MainMenu {visibility: hidden;}
 footer {visibility: hidden;}
 header[data-testid="stHeader"] { background: transparent !important; }
 
-/* 2. SIDEBAR (SOL MENÜ) - ŞIK VE PROFESYONEL */
 [data-testid="stSidebar"] {
     background-color: #FFFFFF !important;
     border-right: 1px solid #E2E8F0 !important;
     box-shadow: 4px 0 24px rgba(0,0,0,0.02) !important;
 }
 
-/* Pasif Menü Seçenekleri */
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {
     padding: 12px 16px !important;
     margin-bottom: 8px !important;
@@ -74,7 +73,6 @@ header[data-testid="stHeader"] { background: transparent !important; }
     transform: translateX(4px);
 }
 
-/* Aktif (Seçili) Menü Butonu - Koyu Antrasit/Lacivert Degrade */
 [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label:has(input:checked) {
     background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%) !important;
     color: #FFFFFF !important;
@@ -85,7 +83,6 @@ header[data-testid="stHeader"] { background: transparent !important; }
     color: #FFFFFF !important;
 }
 
-/* 3. METRİKLER (KASA DURUM KARTLARI) */
 div[data-testid="stMetric"] {
     background-color: var(--card-bg) !important;
     border-radius: 16px !important;
@@ -102,7 +99,6 @@ div[data-testid="stMetric"]:hover {
 div[data-testid="stMetric"] label { color: var(--text-muted) !important; font-weight: 600 !important; font-size: 0.9rem !important; }
 div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #0F172A !important; font-weight: 800 !important; font-size: 1.8rem !important; }
 
-/* 4. BUTONLAR */
 .stButton>button[kind="primary"] {
     background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%) !important;
     color: white !important;
@@ -131,14 +127,12 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #0F172A !i
     border-color: #94A3B8 !important;
 }
 
-/* 5. TABLAR (SEKMELER) */
 .stTabs [data-baseweb="tab-list"] { background-color: transparent; border-bottom: 2px solid #E2E8F0; gap: 32px; }
 .stTabs [data-baseweb="tab"] p { color: #64748B !important; font-weight: 600 !important; font-size: 1.05rem !important; transition: color 0.2s; }
 .stTabs [data-baseweb="tab"]:hover p { color: #0F172A !important; }
 .stTabs [aria-selected="true"] p { color: var(--primary-dark) !important; font-weight: 800 !important; }
 .stTabs [aria-selected="true"] { border-bottom: 3px solid var(--primary-dark) !important; }
 
-/* 6. INPUT VE FORMLAR */
 .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input {
     border-radius: 10px !important;
     border: 1px solid #CBD5E1 !important;
@@ -150,7 +144,6 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #0F172A !i
     box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15) !important;
 }
 
-/* Section Headers Customization */
 .section-header {
     color: #0284C7;
     font-size: 1.1rem;
@@ -163,24 +156,34 @@ div[data-testid="stMetric"] div[data-testid="stMetricValue"] { color: #0F172A !i
 }
 </style>
 """
-
 st.markdown(gizleme_kodu, unsafe_allow_html=True)
 
 # ==========================================
 # 1. TEMEL AYARLAR VE SABİTLER
 # ==========================================
-VERSIYON = "v9.68 (Premium UI)"
+VERSIYON = "v9.70 (Hibrit Mimari: Supabase + Drive)"
 SHEET_ID = "19zBeYZMLjpMe5rx1d6p6TNwQjHGFfqAx-qVKVxDxh24"
 DRIVE_KLASOR_ID = "17wXJilHVDuHhDWS-POS4nr_RjUZnN7eL" 
 
 try:
-    PORTAL_KULLANICI = st.secrets["PORTAL_KULLANICI"]
-    PORTAL_SIFRE = st.secrets["PORTAL_SIFRE"]
-    GONDEREN_MAIL = st.secrets["GONDEREN_MAIL"]
-    MAIL_SIFRE = st.secrets["MAIL_SIFRE"]
+    PORTAL_KULLANICI = st.secrets["akturk"]
+    PORTAL_SIFRE = st.secrets["301223Milka."]
+    
+    # ⚡ SUPABASE BAĞLANTISI ⚡
+    SUPABASE_URL = st.secrets.get("https://hxxekdswfydidsagtndy.supabase.co", "")
+    SUPABASE_KEY = st.secrets.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh4eGVrZHN3ZnlkaWRzYWd0bmR5Iiwicm9sZSI6Imh4ZXIiLCJpYXQiOjE3Nzk3Nzk0MTMsImV4cCI6MjA5NTM1NTQxM30.-zVQJ-g-SYXJt9aDfC-_zRaTB-nT_voIPmWqVdEVbJw", "")
 except Exception:
-    st.error("🚨 Güvenlik Kasası Bulunamadı! Lütfen bilgisayarınızdaki .streamlit/secrets.toml dosyanızı oluşturun.")
+    st.error("🚨 Güvenlik Kasası Bulunamadı! Lütfen .streamlit/secrets.toml dosyanızı kontrol edin.")
     st.stop()
+
+@st.cache_resource
+def get_supabase():
+    if SUPABASE_URL and SUPABASE_KEY:
+        try: return create_client(SUPABASE_URL, SUPABASE_KEY)
+        except: return None
+    return None
+
+supabase = get_supabase()
 
 # ==========================================
 # 2. YARDIMCI FONKSİYONLAR VE API KALKANI
@@ -197,22 +200,17 @@ def api_kalkani(fonksiyon):
         try: return fonksiyon()
         except Exception as e:
             if deneme < 3: time.sleep(bekleme_suresi); bekleme_suresi *= 2 
-            else: st.error("🚨 Google Sunucuları şu an çok yoğun olduğu için yanıt vermiyor. Lütfen sayfayı yenileyip 1 dakika sonra tekrar deneyin."); return None
+            else: st.toast("🚨 Google Sunucuları meşgul.", icon="❌"); return None
 
 def guvenli_kayit(tablo, veri, max_deneme=3, is_multi=False):
     for deneme in range(max_deneme):
         try:
-            if is_multi:
-                tablo.append_rows(veri, value_input_option='USER_ENTERED')
-            else:
-                tablo.append_row(veri, value_input_option='USER_ENTERED')
+            if is_multi: tablo.append_rows(veri, value_input_option='USER_ENTERED')
+            else: tablo.append_row(veri, value_input_option='USER_ENTERED')
             return True
         except Exception as e:
-            if deneme < max_deneme - 1:
-                time.sleep(2)
-            else:
-                st.toast(f"🚨 Bağlantı hatası: {e}", icon="❌")
-                return False
+            if deneme < max_deneme - 1: time.sleep(2)
+            else: return False
 
 @st.cache_resource(show_spinner="Bağlantı Kuruluyor...")
 def get_credentials():
@@ -220,7 +218,7 @@ def get_credentials():
         if "google_kasa" in st.secrets:
             return Credentials.from_service_account_info(json.loads(st.secrets["google_kasa"]), scopes=["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"])
     except Exception: pass
-    st.error("🚨 Google Kasa verisi okunamadı. secrets.toml dosyasını kontrol edin."); st.stop()
+    st.error("🚨 Google Kasa verisi okunamadı."); st.stop()
 
 @st.cache_resource
 def get_client(): return gspread.authorize(get_credentials())
@@ -306,7 +304,6 @@ def excel_indir(df, buton_metni, dosya_adi, help_text="Listeyi Excel dosyası ol
         toplamlar = {}
         satir_sayisi = len(df_export)
         para_kolonlari = ["Net Prim", "Brüt Prim", "Şirket Komisyonu", "Aktürk Sigorta Kazancı", "Borc", "Alacak", "Toplam Borç", "Toplam Alacak", "Dip Tutar (Bakiye)", "Bakiye (Kalan)", "Hakediş (Bize Borç)", "Tahsilat (Bize Ödenen)"]
-        
         borc_col = next((c for c in ["Borc", "Hakediş (Bize Borç)", "Toplam Borç"] if c in df_export.columns), None)
         alacak_col = next((c for c in ["Alacak", "Tahsilat (Bize Ödenen)", "Toplam Alacak"] if c in df_export.columns), None)
 
@@ -355,9 +352,25 @@ def get_kok_police(pno):
     return str(pno).strip()
 
 def fis_no_uret(islem_tipi="POL"): return f"{islem_tipi}-{datetime.now().strftime('%y%m%d%H%M')}{random.randint(10, 99)}"
-    
+
+# 🔥 YENİ HİBRİT OKUMA FONKSİYONU
 @st.cache_data(ttl=5, show_spinner=False)
 def get_data(sheet_name):
+    # EĞER SUPABASE AKTİFSE VE BAŞARILIYSA ÖNCE ORADAN ÇEK
+    if supabase:
+        try:
+            res = supabase.table(sheet_name).select("*").execute()
+            if res.data:
+                df = pd.DataFrame(res.data)
+                # Google Sheets geriye dönük uyumluluk için satır numarası ekle
+                if 'id' in df.columns: df['Sheet_Row'] = df['id']
+                for col in ["Müşteri Adı Soyadı", "Kisi_Kurum", "Musteri_Adi", "Sirket_Adi", "Sigorta Şirketi", "Acente", "Acente_Adi"]:
+                    if col in df.columns: df[col] = df[col].apply(temiz_isim)
+                return df
+        except Exception as e:
+            pass # Supabase henüz kurulmadıysa veya tablo yoksa sessizce Google Sheets'e geç.
+            
+    # SUPABASE YOKSA VEYA HATA VERİRSE GOOGLE SHEETS'TEN ÇEK (YEDEK SİSTEM)
     def _fetch():
         try: return client.open_by_key(SHEET_ID).worksheet(sheet_name).get_all_values()
         except gspread.exceptions.WorksheetNotFound: return []
@@ -400,42 +413,23 @@ def drive_pdf_sil(link):
 def klasik_analiz(metin):
     data = {"tanzim": "", "baslangic": "", "bitis": "", "musteri": "", "tc_vkn": "", "sirket": "", "urun": "", "p_no": "", "plaka": "", "net_prim": 0.0, "brut_prim": 0.0}
     metin_upper = metin.upper()
-    
-    sirketler = {
-        "ANKARA SİGORTA": "Ankara Sigorta", "DOĞA SİGORTA": "Doğa Sigorta", "ALLIANZ": "Allianz Sigorta", 
-        "HDI SİGORTA": "HDI Sigorta", "HDİ": "HDI Sigorta", "HEPİYİ": "Hepiyi Sigorta", 
-        "RAY SİGORTA": "Ray Sigorta", "SOMPO": "Sompo Sigorta", "TÜRKİYE SİGORTA": "Türkiye Sigorta", 
-        "AK SİGORTA": "Ak Sigorta", "ETHICA": "Ethica Sigorta", "NEOVA": "Neova Sigorta",
-        "QUICK": "Quick Sigorta", "CORPUS": "Corpus Sigorta", "BEREKET": "Bereket Sigorta"
-    }
+    sirketler = {"ANKARA SİGORTA": "Ankara Sigorta", "DOĞA SİGORTA": "Doğa Sigorta", "ALLIANZ": "Allianz Sigorta", "HDI SİGORTA": "HDI Sigorta", "HDİ": "HDI Sigorta", "HEPİYİ": "Hepiyi Sigorta", "RAY SİGORTA": "Ray Sigorta", "SOMPO": "Sompo Sigorta", "TÜRKİYE SİGORTA": "Türkiye Sigorta", "AK SİGORTA": "Ak Sigorta", "ETHICA": "Ethica Sigorta", "NEOVA": "Neova Sigorta", "QUICK": "Quick Sigorta", "CORPUS": "Corpus Sigorta", "BEREKET": "Bereket Sigorta"}
     for anahtar, deger in sirketler.items():
         if anahtar in metin_upper: data["sirket"] = deger; break
-
-    urun_tipleri = {
-        "TRAFİK": "Trafik Sigortası", "KASKO": "Kasko", "SAĞLIK": "Sağlık Sigortası", 
-        "TSS": "Sağlık Sigortası", "DASK": "Dask", "DOĞAL AFET": "Dask", 
-        "KONUT": "Konut Sigortası", "İŞYERİ": "İşyeri Sigortası", "İMM": "İmm", 
-        "ALLRİSK": "İnşaat Allrisk", "NAKLİYAT": "Nakliyat Sigortası"
-    }
+    urun_tipleri = {"TRAFİK": "Trafik Sigortası", "KASKO": "Kasko", "SAĞLIK": "Sağlık Sigortası", "TSS": "Sağlık Sigortası", "DASK": "Dask", "DOĞAL AFET": "Dask", "KONUT": "Konut Sigortası", "İŞYERİ": "İşyeri Sigortası", "İMM": "İmm", "ALLRİSK": "İnşaat Allrisk", "NAKLİYAT": "Nakliyat Sigortası"}
     for anahtar, deger in urun_tipleri.items():
         if anahtar in metin_upper: data["urun"] = deger; break
-
     tarihler = re.findall(r'\b\d{2}[\./-]\d{2}[\./-]\d{4}\b', metin)
-    if len(tarihler) >= 3: 
-        data["tanzim"], data["baslangic"], data["bitis"] = [t.replace("/", ".") for t in tarihler[:3]]
-
+    if len(tarihler) >= 3: data["tanzim"], data["baslangic"], data["bitis"] = [t.replace("/", ".") for t in tarihler[:3]]
     tc = re.search(r'\b[0-9]{10,11}\b', metin)
     if tc: data["tc_vkn"] = tc.group()
-
     plaka = re.search(r'\b(0[1-9]|[1-7][0-9]|8[0-1])\s*[A-Z]{1,3}\s*[0-9]{2,4}\b', metin_upper)
     if plaka: data["plaka"] = plaka.group().replace(" ", "")
-
     primler = re.findall(r'(\d+[\.,]\d{2})\s*(?:TL|TRY|€|\$|EUR|USD)?', metin)
     if primler:
         prim_listesi = sorted([sayiya_cevir(p) for p in primler], reverse=True)
         if len(prim_listesi) >= 1: data["brut_prim"] = prim_listesi[0]
         if len(prim_listesi) >= 2: data["net_prim"] = prim_listesi[1]
-
     return data
 
 STIL_AYARLARI = {"PDF Linki": st.column_config.LinkColumn("📄 Belge", display_text="📥 PDF İNDİR")}
@@ -475,12 +469,14 @@ if not st.session_state["giris_yapildi"]:
 else:
     st.sidebar.markdown("""<div style='display: flex; align-items: center; margin-bottom: 30px; margin-top: 10px; padding: 10px; background-color: #F8FAFC; border-radius: 12px; border: 1px solid #E2E8F0;'><div style='background: linear-gradient(135deg, #1D4ED8 0%, #1E3A8A 100%); width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; margin-right: 15px; box-shadow: 0 4px 10px rgba(29, 78, 216, 0.3);'><span style='font-size: 20px; font-weight: 900; color: #FFFFFF;'>A</span></div><div><h2 style='margin: 0; color: #0F172A; font-size: 18px; font-weight: 800; letter-spacing: -0.5px;'>Aktürk ERP</h2><span style='color: #64748B; font-size: 12px; font-weight: 700;'>Kullanıcı: {0}</span></div></div>""".format(st.session_state['kullanici_adi'].upper()), unsafe_allow_html=True)
     menu = st.sidebar.radio("", ["📥 İşlem Merkezi (Poliçe)", "💰 Cari & Mutabakat", "📅 Yenileme Takvimi", "🔎 Akıllı Arama", "🛠️ Kayıt Onarım & Silme", "⚙️ Sistem Ayarları", "📂 Genel Arşiv"], on_change=ekran_temizle, label_visibility="collapsed")
-    st.sidebar.markdown(f"<div style='text-align: center; margin-top: 20px;'><span style='color: #94A3B8; font-size: 11px; font-weight: 600;'>{VERSIYON}</span></div>", unsafe_allow_html=True)
+    
+    # Veritabanı durumunu belirten ikon
+    db_status = "⚡ Supabase Aktif" if supabase else "☁️ Sheets Modu"
+    st.sidebar.markdown(f"<div style='text-align: center; margin-top: 20px;'><span style='color: #94A3B8; font-size: 11px; font-weight: 600;'>{VERSIYON}<br>{db_status}</span></div>", unsafe_allow_html=True)
 
     if menu == "📥 İşlem Merkezi (Poliçe)":
         st.header("Yeni Poliçe & İşlem Kaydı")
         
-        # AYARLAR TABLOLARINI ÇEK
         df_urun = get_data("Ayarlar_Urunler")
         urun_listesi = df_urun["Urun_Adi"].tolist() if not df_urun.empty else ["Trafik Sigortası", "Kasko", "Sağlık Sigortası"]
         dict_urun = dict(zip(df_urun['Urun_Adi'], df_urun['Komisyon_Orani'])) if not df_urun.empty else {}
@@ -539,7 +535,6 @@ else:
                 ilet = c6.text_input("Telefon / E-mail", ana_pol_data.get("Telefon / E-mail", ""))
                 
                 c7, c8, c9 = st.columns(3)
-                
                 def_sir = str(ana_pol_data.get("Sigorta Şirketi", p_data["sirket"])).replace(" (İPTAL-SATIŞ)", "").replace(" (İPTAL-ZEYL)", "") if ana_pol_data else p_data["sirket"]
                 if def_sir and def_sir not in sirket_listesi and def_sir != "":
                     sirket_listesi.insert(0, def_sir)
@@ -585,10 +580,10 @@ else:
             st.markdown("<br>", unsafe_allow_html=True)
             submit_btn = st.form_submit_button("Sisteme İşle ve Kaydet", type="primary", use_container_width=True)
             
+            # 🔥 HİBRİT KAYIT MOTORU (SUPABASE + SHEETS + DRIVE)
             if submit_btn:
-                with st.status("Veriler Google Sunucularına İşleniyor...", expanded=True) as status:
+                with st.status("Veriler İşleniyor...", expanded=True) as status:
                     try:
-                        st.write("Veritabanı bağlantısı kuruluyor...")
                         doc = client.open_by_key(SHEET_ID)
                         mus = temiz_isim(mus_girdi)
                         sir = temiz_isim(sir_girdi) if sir_girdi != "➕ YENİ ŞİRKET EKLE" else temiz_isim(yeni_sirket_adi)
@@ -612,7 +607,7 @@ else:
                             net = abs(net); brut = abs(brut); kom_manuel = abs(kom_manuel) if kom_manuel > 0 else 0.0
                             islem_notu = f"EK TEMİNAT/PRİM ARTIŞ ZEYLİ{baglanti_notu}"
                         
-                        st.write("PDF Drive'a yükleniyor...")
+                        status.update(label="PDF Drive'a yükleniyor...")
                         link = drive_pdf_yukle(f_bytes, f"{mus}_{plk_temiz}_{sir_iptal}.pdf") if f_bytes else "Yok"
                         
                         u_oran = float(sayiya_cevir(dict_urun.get(urn, 0.0)))
@@ -622,12 +617,14 @@ else:
                         if aktif_acente == "➕ YENİ TALİ ACENTE EKLE" and yeni_acente_adi != "":
                             aktif_acente = temiz_isim(yeni_acente_adi)
                             doc.worksheet("Ayarlar_Acenteler").append_row([aktif_acente, yeni_acente_orani], value_input_option='USER_ENTERED')
+                            if supabase: supabase.table("Ayarlar_Acenteler").insert({"Acente_Adi": aktif_acente, "Tali_Oran": yeni_acente_orani}).execute()
                             t_oran = yeni_acente_orani
                         else: t_oran = float(sayiya_cevir(dict_acente.get(aktif_acente, 0.0)))
                         if t_oran > 1: t_oran /= 100 
                         
                         if sir_girdi == "➕ YENİ ŞİRKET EKLE" and yeni_sirket_adi != "":
                             doc.worksheet("Ayarlar_Sirketler").append_row([sir, ""], value_input_option='USER_ENTERED')
+                            if supabase: supabase.table("Ayarlar_Sirketler").insert({"Sirket_Adi": sir}).execute()
 
                         akturk_kazanci = float(sirket_komisyonu * t_oran)
                         islem_tarihi = tarih_formatla(tan)
@@ -654,7 +651,7 @@ else:
                                 if key in c_headers: satir[c_headers.index(key)] = val
                             return satir
 
-                        st.write("Cari hesaplara işleniyor...")
+                        status.update(label="Veritabanlarına işleniyor...")
                         if "İPTAL" in islem_notu: mus_detay = f"{islem_notu} İADESİ - {aciklama}"
                         elif islem_notu: mus_detay = f"{islem_notu} - {aciklama}"
                         else: mus_detay = aciklama
@@ -674,12 +671,22 @@ else:
                             else: acn_detay = f"Acente Payı Hakediş - {aciklama}"
                             yeni_satirlar.append(cari_satir_hazirla(islem_tarihi, "Tali Acente Carisi", aktif_acente, acn_detay, akturk_kazanci, 0.0, "Fatura Bekleniyor", 1, yeni_fis_no))
 
-                        # Güvenli Kayıt
+                        # ⚡ 1. SUPABASE (HIZLI VERİTABANI) KAYDI
+                        if supabase:
+                            try:
+                                supabase.table("Policeler").insert(row_dict).execute()
+                                for satir in yeni_satirlar:
+                                    cari_dict = {c_headers[i]: satir[i] for i in range(len(c_headers))}
+                                    supabase.table("Cari_Islemler").insert(cari_dict).execute()
+                            except Exception as sb_err:
+                                print(f"Supabase Kayıt Hatası: {sb_err}")
+
+                        # 🛡️ 2. GOOGLE SHEETS (GÜVENLİK YEDEĞİ) KAYDI
                         if guvenli_kayit(ws_pol, pol_veri):
                             if guvenli_kayit(ws_cari, yeni_satirlar, is_multi=True):
                                 guvenli_kayit(doc.worksheet("Musteriler"), [mus, tc, ilet, brut])
                                 status.update(label="İşlem Başarıyla Tamamlandı!", state="complete", expanded=False)
-                                st.toast("Harika! Poliçe başarıyla kaydedildi ve tüm cari hesaplara hatasız işlendi.", icon="🎉")
+                                st.toast("Harika! Poliçe başarıyla kaydedildi.", icon="🎉")
                             else:
                                 status.update(label="Cari Kayıt Hatası!", state="error", expanded=False)
                                 st.error("⚠️ Poliçe kaydedildi ANCAK bağlantı sorunu yüzünden Cari tabloya yazılamadı.")
@@ -832,6 +839,7 @@ else:
                                 for key, val in mapping.items():
                                     if key in c_headers: satir[c_headers.index(key)] = val
                                 ws_cari.append_row(satir, value_input_option='USER_ENTERED')
+                                if supabase: supabase.table("Cari_Islemler").insert(mapping).execute()
                                 return True
                             if api_kalkani(_tali_odeme): 
                                 status.update(label="Başarılı!", state="complete")
@@ -900,6 +908,7 @@ else:
                                 for key, val in mapping.items():
                                     if key in c_headers: satir[c_headers.index(key)] = val
                                 ws_cari.append_row(satir, value_input_option='USER_ENTERED')
+                                if supabase: supabase.table("Cari_Islemler").insert(mapping).execute()
                                 return True
                             if api_kalkani(_sirket_odeme): 
                                 status.update(label="Başarılı!", state="complete")
@@ -963,6 +972,7 @@ else:
                                     for key, val in mapping.items():
                                         if key in c_headers: satir[c_headers.index(key)] = val
                                     ws_cari.append_row(satir, value_input_option='USER_ENTERED')
+                                    if supabase: supabase.table("Cari_Islemler").insert(mapping).execute()
                                     return True
                                 if api_kalkani(_mus_odeme) is not None: 
                                     status.update(label="Başarılı!", state="complete")
@@ -1202,7 +1212,7 @@ else:
         df_pol = get_data("Policeler")
         if not df_pol.empty:
             with st.container(border=True):
-                ara = st.text_input("Arama Çubuğu (İsim, Plaka, Poliçe No):", placeholder="Örn: Baran, 35B123...")
+                ara = st.text_input("Arama Çubuğu (İsim, Plaka, Poliçe No):", placeholder="Örn: Aktürk Sigorta, 35B123...")
             
             if ara:
                 ara_temiz = temiz_isim(ara)
@@ -1229,7 +1239,7 @@ else:
                     st.markdown("<div class='section-header'>KAYIT DETAYLARI VE YÖNETİM</div>", unsafe_allow_html=True)
                     if len(sonuc) > 50: st.warning(f"Sadece ilk 50 kaydın işlem kartı listeleniyor.")
                     kart_icin_sonuc = sonuc.head(50) if len(sonuc) > 50 else sonuc
-                        
+                    
                     for index, row in kart_icin_sonuc.iterrows():
                         with st.container(border=True):
                             st.markdown(f"<h4 style='color: #0284C7; margin-bottom: 0px;'>{row['Müşteri Adı Soyadı']} - {row['Plaka']}</h4>", unsafe_allow_html=True)
@@ -1290,7 +1300,7 @@ else:
                                         st.cache_data.clear(); time.sleep(0.5); st.rerun()
 
         with t2:
-            st.warning("⚠️ Bu işlem müşteriye ait tüm Google Sheet geçmişini KALICI olarak siler.")
+            st.warning("⚠️ Bu işlem müşteriye ait tüm geçmişi KALICI olarak siler.")
             df_mus_sil = get_data("Musteriler")
             if not df_mus_sil.empty:
                 sil_mus_listesi = [m for m in df_mus_sil["Musteri_Adi"].dropna().unique().tolist() if str(m).strip() != ""]
