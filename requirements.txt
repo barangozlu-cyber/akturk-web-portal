@@ -6,3 +6,5 @@ google-api-python-client
 pandas
 openpyxl
 xlsxwriter
+psycopg2-binary
+SQLAlchemy
