@@ -11,8 +11,6 @@ import os
 import random
 from sqlalchemy import create_engine
 
-# ... kodunun geri kalanı aynı şekilde devam ediyor ...
-
 # ==========================================
 # 1. PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
 # ==========================================
@@ -43,16 +41,14 @@ st.markdown(gizleme_kodu, unsafe_allow_html=True)
 VERSIYON = "v11.0 (PostgreSQL Sunucusu)"
 PDF_DIR = "uploads"
 
-# Senin CasaOS sunucu bilgilerin koda entegre edildi
-DB_USER = "casaos"
-DB_PASS = "casaos"
-DB_HOST = "192.168.1.14"
-DB_PORT = "5432"
-DB_NAME = "casaos"
-
+# Şifreleri doğrudan koddan silip secrets.toml'a bağladık
 try:
-    # Veritabanı motorunu oluştur
-    db_url = f'postgresql+psycopg2://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}'
+    if "DB_URL" in st.secrets:
+        db_url = st.secrets["DB_URL"]
+    else:
+        # Eğer yerelde bulamazsa yedek olarak senin bilgileri kullanır
+        db_url = 'postgresql+psycopg2://casaos:casaos@192.168.1.14:5432/casaos'
+        
     engine = create_engine(db_url)
 except Exception as e:
     st.error(f"Veritabanı bağlantı motoru oluşturulamadı: {e}")
@@ -68,6 +64,36 @@ if "giris_yapildi" not in st.session_state: st.session_state["giris_yapildi"] = 
 def ekran_temizle():
     for key in list(st.session_state.keys()):
         if key not in ["giris_yapildi", "kullanici_adi"]: del st.session_state[key]
+
+def temiz_isim(metin):
+    if pd.isna(metin) or not metin: return ""
+    return str(metin).strip().replace('i', 'İ').replace('ı', 'I').upper()
+
+def sayiya_cevir(deger):
+    if pd.isna(deger) or str(deger).strip() == "": return 0.0
+    if isinstance(deger, (int, float)): return float(deger)
+    deger_str = re.sub(r'[^\d.,-]', '', str(deger).strip()).rstrip('.,')
+    if not deger_str: return 0.0
+    if '.' in deger_str and ',' in deger_str:
+        if deger_str.rfind(',') > deger_str.rfind('.'): deger_str = deger_str.replace('.', '').replace(',', '.')
+        else: deger_str = deger_str.replace(',', '')
+    elif ',' in deger_str:
+        if deger_str.count(',') > 1: deger_str = deger_str.replace(',', '')
+        else: deger_str = deger_str.replace(',', '.')
+    try: return float(deger_str)
+    except: return 0.0
+
+def para_format(deger):
+    try: return "{:,.2f}".format(sayiya_cevir(deger)).replace(",", "X").replace(".", ",").replace("X", ".") + " TL"
+    except: return "0,00 TL"
+
+def df_gorsel_yap(df, para_kolonlari):
+    """Verileri görselleştirirken kopyasını alıp formatlar"""
+    kopya_df = df.copy()
+    for col in para_kolonlari:
+        if col in kopya_df.columns:
+            kopya_df[col] = kopya_df[col].apply(para_format)
+    return kopya_df
 
 @st.cache_data(ttl=5)
 def get_data(table_name):
@@ -102,28 +128,6 @@ def sunucuya_pdf_kaydet(file_bytes, original_name):
             f.write(file_bytes)
         return file_path
     except Exception: return "Yok"
-
-def temiz_isim(metin):
-    if pd.isna(metin) or not metin: return ""
-    return str(metin).strip().replace('i', 'İ').replace('ı', 'I').upper()
-
-def sayiya_cevir(deger):
-    if pd.isna(deger) or str(deger).strip() == "": return 0.0
-    if isinstance(deger, (int, float)): return float(deger)
-    deger_str = re.sub(r'[^\d.,-]', '', str(deger).strip()).rstrip('.,')
-    if not deger_str: return 0.0
-    if '.' in deger_str and ',' in deger_str:
-        if deger_str.rfind(',') > deger_str.rfind('.'): deger_str = deger_str.replace('.', '').replace(',', '.')
-        else: deger_str = deger_str.replace(',', '')
-    elif ',' in deger_str:
-        if deger_str.count(',') > 1: deger_str = deger_str.replace(',', '')
-        else: deger_str = deger_str.replace(',', '.')
-    try: return float(deger_str)
-    except: return 0.0
-
-def para_format(deger):
-    try: return "{:,.2f}".format(sayiya_cevir(deger)).replace(",", "X").replace(".", ",").replace("X", ".") + " TL"
-    except: return "0,00 TL"
 
 def tarih_formatla(tarih_degeri):
     if pd.isna(tarih_degeri) or str(tarih_degeri).strip() == "": return datetime.now().strftime("%d.%m.%Y")
@@ -169,7 +173,7 @@ if not st.session_state["giris_yapildi"]:
                 if not eslesen.empty and str(eslesen["Şifre"].values[0]) == str(p):
                     st.session_state["giris_yapildi"] = True; st.session_state["kullanici_adi"] = u; st.rerun()
                 else: st.error("⚠️ Hatalı kullanıcı adı veya şifre!")
-            elif u == "admin" and p == "123456": # Veritabanı boşken ilk giriş için acil durum kapısı
+            elif u == "admin" and p == "123456": 
                 st.session_state["giris_yapildi"] = True; st.session_state["kullanici_adi"] = u; st.rerun()
             else:
                 st.error("⚠️ Hatalı kullanıcı adı veya şifre!")
@@ -186,7 +190,6 @@ else:
     if menu == "📥 İşlem Merkezi (Poliçe)":
         st.header("Yeni Poliçe & İşlem Kaydı")
         
-        # Ayarları Veritabanından Çek
         df_urun = get_data("Ayarlar_Urunler")
         urun_listesi = df_urun["Urun_Adi"].tolist() if not df_urun.empty else ["Trafik Sigortası", "Kasko", "Sağlık Sigortası"]
         dict_urun = dict(zip(df_urun['Urun_Adi'], df_urun['Komisyon_Orani'])) if not df_urun.empty else {}
@@ -274,7 +277,6 @@ else:
                         if sir_girdi == "➕ YENİ ŞİRKET EKLE" and yeni_sirket_adi != "":
                             guvenli_kayit("Ayarlar_Sirketler", [{"Sirket_Adi": sir}])
 
-                        # SQL INSERT İŞLEMLERİ (Veri Sözlükleri)
                         pol_veri = {
                             "Tanzim Tarihi": tarih_formatla(tan), "Başlangıç Tarihi": bas, "Bitiş Tarihi": bit, 
                             "Müşteri Adı Soyadı": mus, "TC / VKN": tc, "Sigorta Şirketi": sir, "Sigorta Türü": urn, 
@@ -285,12 +287,10 @@ else:
                         cari_veriler = []
                         aciklama = f"{sir} - {urn} - Plaka: {plk_temiz}"
                         
-                        # Müşteri Carisi
                         cari_veriler.append({"Tarih": tarih_formatla(tan), "Islem_Turu": "Müşteri Carisi", "Kisi_Kurum": mus, "Islem_Detayi": aciklama, "Borc": brut, "Alacak": 0.0, "Fiş No": yeni_fis_no})
                         if alinan_odeme > 0:
                             cari_veriler.append({"Tarih": tarih_formatla(tan), "Islem_Turu": "Müşteri Carisi", "Kisi_Kurum": mus, "Islem_Detayi": "Anında Tahsilat", "Borc": 0.0, "Alacak": alinan_odeme, "Fiş No": yeni_fis_no})
                         
-                        # Acente / Şirket Carisi
                         if aktif_acente == "AKTÜRK SİGORTA (MERKEZ)":
                             cari_veriler.append({"Tarih": tarih_formatla(tan), "Islem_Turu": "Sigorta Şirketi Carisi", "Kisi_Kurum": sir, "Islem_Detayi": f"Şirket Komisyonu Hakediş - {aciklama}", "Borc": sirket_komisyonu, "Alacak": 0.0, "Fiş No": yeni_fis_no})
                         else:
