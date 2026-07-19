@@ -1,18 +1,5 @@
 import sys
 import subprocess
-
-# --- OTOMATİK EKSİK KÜTÜPHANE YÜKLEYİCİ ---
-try:
-    import sqlalchemy
-    import psycopg2
-except ImportError:
-    # Sistemin genel pip'i yerine, doğrudan programın KENDİ gömülü Python'una kurulum yapar
-    subprocess.run([sys.executable, "-m", "pip", "install", "SQLAlchemy", "psycopg2-binary"], check=True)
-    import streamlit as st
-    st.warning("⚠️ Yeni sistem güncellemeleri (PostgreSQL altyapısı) başarıyla indirildi!")
-    st.error("Değişikliklerin aktif olması için LÜTFEN PROGRAMI TAMAMEN KAPATIP YENİDEN AÇIN.")
-    st.stop() # Uygulamanın çökmesini engeller
-
 # --- STANDART KÜTÜPHANELER ---
 import streamlit as st
 import pdfplumber
