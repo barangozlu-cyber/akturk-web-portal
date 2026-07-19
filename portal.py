@@ -1,3 +1,14 @@
+import subprocess
+import sys
+
+# --- OTOMATİK EKSİK KÜTÜPHANE YÜKLEYİCİ ---
+try:
+    import sqlalchemy
+    import psycopg2
+except ImportError:
+    # Kütüphane yoksa arka planda sessizce kur
+    subprocess.run(["pip", "install", "SQLAlchemy", "psycopg2-binary"], check=True)
+
 import streamlit as st
 import pdfplumber
 import pandas as pd
@@ -7,6 +18,8 @@ import io
 import os
 import random
 from sqlalchemy import create_engine
+
+# ... kodun geri kalanı aynı şekilde devam ediyor ...
 
 # ==========================================
 # 1. PREMIUM ERP ARAYÜZ (UI/UX) CSS KODLARI
